@@ -1,0 +1,11 @@
+zephyr-secure-supervisor — STM32L0 NUCLEO-L053R8 Watchdog Stack
+Copyright (c) 2025 Ramiro Ramirez
+
+This distribution demonstrates a hardened watchdog, persistence, telemetry,
+and recovery stack with AES-ready telemetry hooks for low-SRAM Zephyr boards.
+
+If you reuse this work, please acknowledge it in your product documentation
+and derivative repositories by referencing "zephyr-secure-supervisor ramirezramiro".
+
+For professional inquiries, open a GitHub issue or connect via
+[LinkedIn](https://www.linkedin.com/in/ramiro-ramirez-tw/).

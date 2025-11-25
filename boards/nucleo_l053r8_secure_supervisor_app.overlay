@@ -1,0 +1,17 @@
+&code_partition {
+	/delete-property/ zephyr,code-partition;
+};
+
+/ {
+	chosen {
+		zephyr,code-partition = &code_partition;
+	};
+};
+
+&i2c1 {
+	hts221: hts221@5f {
+		compatible = "st,hts221";
+		reg = <0x5f>;
+		status = "okay";
+	};
+};

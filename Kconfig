@@ -1,0 +1,132 @@
+menu "LED Threads Application"
+
+config APP_WATCHDOG_BOOT_TIMEOUT_MS
+	int "Boot watchdog timeout (ms)"
+	default 8000
+	range 100 60000
+	help
+	  Initial watchdog timeout applied during system startup. Use a large
+	  value to cover expensive init sequences.
+
+config APP_WATCHDOG_STEADY_TIMEOUT_MS
+	int "Steady-state watchdog timeout (ms)"
+	default 2000
+	range 100 60000
+	help
+	  Watchdog timeout that the supervisor applies once the system has
+	  reached its steady state.
+
+config APP_WATCHDOG_RETUNE_DELAY_MS
+	int "Delay before watchdog retune (ms)"
+	default 5000
+	range 0 60000
+	help
+	  Duration after boot before the watchdog is tightened to the
+	  steady-state timeout.
+
+config APP_RESET_WATCHDOG_THRESHOLD
+	int "Watchdog reset storm threshold"
+	default 3
+	range 1 20
+	help
+	  Number of consecutive watchdog resets that triggers fallback mode.
+
+config APP_HEALTH_LED_STALE_MS
+	int "LED heartbeat stale threshold (ms)"
+	default 1500
+	range 100 10000
+	help
+	  Maximum allowed age of the LED thread heartbeat before it is
+	  considered stale.
+
+config APP_HEALTH_SYS_STALE_MS
+	int "System heartbeat stale threshold (ms)"
+	default 1500
+	range 100 10000
+	help
+	  Maximum allowed age of the system heartbeat before it is
+	  considered stale.
+
+config APP_ENABLE_UART_COMMANDS
+	bool "Enable UART command handler"
+	default y
+	help
+	  Enable a minimal UART command parser for runtime configuration of
+	  watchdog parameters. Disable if RAM usage is too tight.
+
+config APP_SAFE_MODE_REBOOT_DELAY_MS
+	int "Safe-mode auto reboot delay (ms)"
+	default 60000
+	range 0 300000
+	help
+	  When fallback (safe) mode is entered, schedule an automatic warm
+	  reboot after this many milliseconds. Set to 0 to keep the system in
+	  safe mode indefinitely.
+
+config APP_SENSOR_THREAD_STACK_SIZE
+	int "HTS221 sensor thread stack size (bytes)"
+	default 704
+	range 256 4096
+	help
+	  Stack allocation used by the dedicated HTS221 polling thread.
+
+config APP_SUPERVISOR_THREAD_STACK_SIZE
+	int "Supervisor thread stack size (bytes)"
+	default 672
+	range 256 4096
+	help
+	  Controls the stack budget for the watchdog supervisor.
+
+config APP_RECOVERY_THREAD_STACK_SIZE
+	int "Recovery thread stack size (bytes)"
+	default 512
+	range 256 4096
+	help
+	  Stack allocated for the recovery worker thread that handles safe-mode
+	  reboot scheduling.
+
+config APP_SENSOR_SAMPLE_INTERVAL_MS
+	int "HTS221 sample interval (ms)"
+	default 2000
+	range 100 60000
+	help
+	  How often the HTS221 sensor thread fetches temperature/humidity
+	  data while the system is in the normal operating mode.
+
+config APP_SENSOR_SAFE_MODE_INTERVAL_MS
+	int "HTS221 sample interval while in safe mode (ms)"
+	default 5000
+	range 100 120000
+	help
+	  When fallback/safe mode is active, the sensor thread switches to
+	  this slower interval to reduce load while still providing
+	  telemetry. Set to the same value as the normal interval to keep a
+	  constant cadence.
+
+config APP_USE_AES_ENCRYPTION
+	bool "Enable AES encryption helper"
+	default y
+	help
+	  Enables the application-level AES helper that seals telemetry and
+	  persistent state before it is logged or transmitted.
+
+config APP_AES_STATIC_KEY_HEX
+	string "Static AES key (hex)"
+	default "00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF"
+	depends on APP_USE_AES_ENCRYPTION
+	help
+	  128/192/256-bit key encoded as a continuous hex string without
+	  spaces. Replace this value in production with a key derived from a
+	  secure provisioning flow.
+
+config APP_AES_STATIC_IV_HEX
+	string "IV seed (hex)"
+	default "000102030405060708090A0B"
+	depends on APP_USE_AES_ENCRYPTION
+	help
+	  96-bit initial IV that is mixed with a runtime counter when the RNG
+	  is unavailable. Provide a 24-character hex string (12 bytes).
+
+endmenu
+
+source "Kconfig.zephyr"

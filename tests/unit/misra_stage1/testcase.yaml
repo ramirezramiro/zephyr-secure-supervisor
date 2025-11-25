@@ -1,0 +1,5 @@
+tests:
+  zephyr_secure_supervisor.misra_stage1:
+    platform_allow:
+      - nucleo_l053r8
+    build_only: true
