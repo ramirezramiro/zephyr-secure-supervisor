@@ -1,0 +1,6 @@
+tests:
+  zephyr_secure_supervisor.persist_state:
+    platform_allow:
+      - native_sim
+    tags:
+      - persist_state

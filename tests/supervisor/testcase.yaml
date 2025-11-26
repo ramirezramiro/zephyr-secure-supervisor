@@ -1,0 +1,6 @@
+tests:
+  zephyr_secure_supervisor.supervisor:
+    platform_allow:
+      - native_sim
+    tags:
+      - supervisor
