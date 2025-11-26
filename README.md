@@ -5,6 +5,10 @@
 
 Designed for the NUCLEO-L053R8’s 8 KB SRAM envelope, zephyr-secure-supervisor keeps watchdog, crypto, and telemetry services lean so low-power boards can adopt it without extra tuning.
 
+## Post-Quantum Migration Ready
+
+The foundation of this secure supervisor stack is its isolated cryptographic core, making it a drop-in reference for post-quantum migration efforts. `src/app_crypto.c` and `src/simple_aes.c` wrap every persistence + telemetry call, so swapping in PQC-friendly primitives only touches that shim layer. See `docs/app_crypto.md` for the API contract and `docs/persist_state.md` / `tests/persist_state` for how the encrypted blobs are validated on native_sim and hardware.
+
 ## Docs at a Glance
 
 - `docs/architecture.md` – Boot flow, watchdog ownership, and thread/work mapping.
@@ -60,6 +64,8 @@ zephyr-secure-supervisor combines three always-on services:
 | **Supervisor & Recovery** | `src/supervisor.c`, `src/recovery.c`, `src/watchdog_ctrl.c` | Own the STM32 IWDG, gate feeds on LED/system heartbeats, and schedule safe-mode or manual warm reboots. |
 | **Persistence & Crypto** | `src/persist_state.c`, `src/app_crypto.c`, `src/simple_aes.c`, `src/safe_memory.h` | Maintain reset counters + watchdog overrides in NVS, seal blobs with CTR AES, and wrap libc calls with boundary-checked helpers. |
 | **Telemetry & Commands** | `src/sensor_hts221.c`, `src/uart_commands.c`, `src/log_utils.h` | Poll the HTS221 sensor via delayed work, log compact `EVT,<tag>,<status>` lines, and expose an optional UART CLI for watchdog tuning. |
+
+- **Crypto migration hooks** – The crypto wrapper layer is documented (`docs/app_crypto.md`) and covered by tests (`tests/persist_state`, `tests/unit/misra_stage1`), proving the persistence schema so new PQC algorithms can be dropped in without touching supervisor or recovery code.
 
 The sensor worker emits ten plaintext samples on boot before enabling AES-CTR (`sample_counter >= 10U` in `src/sensor_hts221.c`), and `LOG_EVT_*` macros (`log_utils.h`) keep telemetry in the `EVT,<tag>,<status>` format covered in `docs/log_utils.md`.
 
@@ -258,7 +264,3 @@ Captured on NUCLEO-L053R8 at 115200 bps after flashing with `west flash -r openo
 - **Flash succeeds but no LED blink/logs** – Verify `CONFIG_APP_SENSOR_SAMPLE_INTERVAL_MS` isn’t zero, and confirm `/dev/ttyACM0` is the correct serial device or that the LED alias exists in the overlay.
 
 Need deeper dives? See `docs/architecture.md` for block diagrams, `docs/testing.md` for detailed test recipes, `docs/recovery.md` / `docs/supervisor.md` for state machines, and `docs/components.md` for module-by-module notes. The MISRA deviation log (`docs/MISRA_DEVIATIONS.md`) documents the endemic Zephyr macros (logging) and permanent supervisor loops we intentionally keep.***
-
-## Post-Quantum Migration Template (PQC)
-
-The cryptographic core (`src/app_crypto.c`, `src/simple_aes.c`) is already isolated from the watchdog, persistence, and telemetry stacks, so it doubles as a drop-in PQC playground. Swapping AES-CTR for a NIST-standard primitive (Kyber, Dilithium, etc.) only touches that cipher module; the persistence APIs and log formatting stay intact, and all existing supervisor/watchdog behaviors continue to run unmodified.
