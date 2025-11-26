@@ -7,7 +7,7 @@ Designed for the NUCLEO-L053R8’s 8 KB SRAM envelope, zephyr-secure-superviso
 
 ## Post-Quantum Migration Ready
 
-The foundation of this secure supervisor stack is its isolated cryptographic core, making it a drop-in reference for post-quantum migration efforts. `src/app_crypto.c` and `src/simple_aes.c` wrap every persistence + telemetry call, so swapping in PQC-friendly primitives only touches that shim layer. See `docs/app_crypto.md` for the API contract and `docs/persist_state.md` / `tests/persist_state` for how the encrypted blobs are validated on native_sim and hardware.
+The foundation of this secure supervisor stack is its isolated cryptographic core, making it a drop-in reference for post-quantum migration efforts. `src/app_crypto.c` and `src/simple_aes.c` wrap every persistence + telemetry call, so swapping in PQC-friendly primitives only touches that shim layer. SRAM is still tight on the 8 KB NUCLEO-L053R8, so heavier PQC candidates may need footprint trade-offs or, ideally, a larger STM32 board. See `docs/app_crypto.md` for the API contract and `docs/persist_state.md` / `tests/persist_state` for how the encrypted blobs are validated on native_sim and hardware.
 
 ## Docs at a Glance
 
