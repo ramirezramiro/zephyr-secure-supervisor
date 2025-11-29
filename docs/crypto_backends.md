@@ -37,6 +37,25 @@ Both backends are mutually exclusive to keep the 8 KB SRAM footprint in check.
 - Every boot logs `EVT,PQC,SESSION,counter=?,salt=?` so receivers can recompute keys deterministically.
 - `sensor_hts221.c` appends `mac=%08X` to encrypted samples. The MAC = `crc32(derived_mac_key || iv || ciphertext || counter) ^ salt`.
 
+### UART Cues
+
+- **AES-only boot:**
+  ```
+  *** Booting Zephyr OS build … ***
+  [00:00:00.015,000] <inf> app_crypto: AES helper initialized (key_len=32)
+  [00:00:23.803,000] <inf> sensor_hts221: Enabling AES telemetry after initial plaintext samples
+  ```
+- **Curve25519 boot:**
+  ```
+  *** Booting Zephyr OS build … ***
+  [00:00:00.776,000] <inf> app_crypto: EVT,PQC,SESSION,counter=1,salt=0x47CB2DF5
+  [00:00:01.449,000] <inf> app_crypto: Curve25519 key ready (local_pub=808A7FFF..., peer fixed)
+  [00:00:01.457,000] <inf> app_crypto: Curve25519 backend active (shared secret drives AES keys)
+  [00:00:01.467,000] <inf> app_crypto: AES helper initialized (key_len=32, backend=curve25519)
+  [00:00:25.251,000] <inf> sensor_hts221: Enabling Curve25519-backed AES telemetry after initial plaintext samples
+  [00:00:25.263,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,enc=1,…,mac=XXXXXXX
+  ```
+
 ```mermaid
 flowchart TD
     A[Boot] --> B[Check Curve25519 scalar in NVS]

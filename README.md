@@ -53,7 +53,7 @@ sudo screen /dev/ttyACM0 115200
 | AES-CTR | `CONFIG_APP_CRYPTO_BACKEND_AES=y`, leave curve backend unset | `app_crypto: AES helper initialized (key_len=32)` followed by `Enabling AES telemetry…` | Production-ish baseline when static keys + extra ~1 KB SRAM are acceptable. |
 | Curve25519-backed AES | `CONFIG_APP_CRYPTO_BACKEND_CURVE25519=y`, `CONFIG_APP_USE_CURVE25519=y`, set `CONFIG_APP_CURVE25519_STATIC_*` | `app_crypto: Curve25519 key ready…` then `AES helper initialized (key_len=32, backend=curve25519)` and `Enabling Curve25519-backed AES telemetry…` | Per-device scalar PoC with session salts/MACs on 8 KB SRAM. |
 
-Flip the toggles in `prj.conf` (or via `menuconfig`) and rebuild/flash to switch between them. See [docs/crypto_backends.md](docs/crypto_backends.md) for UART screenshots and provisioning details.
+Flip the toggles in `prj.conf` (or via `menuconfig`) and rebuild/flash to switch between them. See [docs/crypto_backends.md](docs/crypto_backends.md) (`docs/crypto_backends.md`) for UART screenshots and provisioning details.
 
 ### SRAM Budget
 
@@ -73,7 +73,7 @@ RAM: 7400 B / 8 KB = 90.33%
 FLASH: 49744 B / 64 KB = 75.90%
 ```
 
-That leaves roughly 600 B of headroom for logs/buffers. [Read more](docs/memory_budget.md) for tuning tips before re-enabling optional services.
+That leaves roughly 600 B of headroom for logs/buffers. [Read more](docs/memory_budget.md) (`docs/memory_budget.md`) for tuning tips before re-enabling optional services.
 
 ### Deployment Guidance
 
@@ -82,7 +82,7 @@ That leaves roughly 600 B of headroom for logs/buffers. [Read more](docs/memor
 - Upsize to STM32U585/STM32L562, NXP LPC55S6x, Nordic nRF5340, or add secure elements (ATECC608A, OPTIGA Trust M) when you need hardware roots of trust or more headroom.
 - Always capture the UART `EVT,PQC,SESSION,...` logs; they’re the only way to reproduce derived AES/MAC keys.
 
-[Read more](docs/deployment.md) for full operating guidance and hardware recommendations.
+[Read more](docs/deployment.md) (`docs/deployment.md`) for full operating guidance and hardware recommendations.
 
 ## Architecture Highlights
 
