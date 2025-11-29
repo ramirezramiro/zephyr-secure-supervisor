@@ -171,7 +171,7 @@ flowchart TD
     Crypto -->|AES key + MAC| Sensor
 ```
 
-**Lifecycle States**
+**System lifecycle state machine**
 
 ```mermaid
 %% System lifecycle state machine
