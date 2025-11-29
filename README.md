@@ -157,6 +157,8 @@ Watchdog, persistence, telemetry, and recovery each run as their own Zephyr thre
 | Persistence (NVS) | `docs/persist_state.md#nvs-flow-diagram` | Mount/retry logic, blob validation, and APIs updating reset counters/overrides. |
 | UART CLI flow | `docs/uart_commands.md#command-flow-diagram` | `wdg?`, `wdg <ms>`, and `wdg clear` handling plus supervisor retunes. |
 
+**Subsystem Interactions**
+
 ```mermaid
 %% Subsystem interactions
 flowchart TD
@@ -168,6 +170,8 @@ flowchart TD
     Persistence -->|Scalar + session counter| Crypto[Curve25519/AES helper]
     Crypto -->|AES key + MAC| Sensor
 ```
+
+**Lifecycle States**
 
 ```mermaid
 %% System lifecycle state machine
