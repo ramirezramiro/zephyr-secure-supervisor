@@ -13,4 +13,17 @@
 - Uses the `LOG_EVT` macros to produce `EVT,UART,...` lines for audit trails.
 - Calls `supervisor_request_manual_recovery` when a command requires an immediate reboot.
 
+### Command Flow Diagram
+
+```mermaid
+flowchart TD
+    U1[wdg? / wdg clear / wdg <ms>] --> U2{Command}
+    U2 -- status --> U3[Print boot/HW timeout/override/fallback]
+    U2 -- clear --> U4[Persist override=0; supervisor retune]
+    U2 -- set --> U5[Persist override=ms; supervisor retune]
+    U3 --> LOOP
+    U4 --> LOOP
+    U5 --> LOOP
+```
+
 Enable the CLI by setting the project-specific Kconfig option (see `prj.conf`) once you know the target board has room for the extra stack and UART buffers.

@@ -12,6 +12,7 @@ struct persist_blob {
 	uint32_t consecutive_watchdog;
 	uint32_t total_watchdog;
 	uint32_t watchdog_override_ms;
+	uint32_t session_counter;
 };
 
 #if IS_ENABLED(CONFIG_APP_USE_AES_ENCRYPTION)

@@ -18,6 +18,21 @@
 
 Safe-mode deadlines are tracked under a mutex to avoid multiple reboots being queued simultaneously. Cancelling or rescheduling the delayed work updates this deadline so the MCU cannot thrash.
 
+### Recovery Flow Diagram
+
+```mermaid
+flowchart TD
+    R0[Recovery event 'manual/health/safe-mode/watchdog init'] --> R1{Reason}
+    R1 -- Manual --> R2[LOG EVT MANUAL + delay]
+    R1 -- Health Fault --> R3[LOG EVT HEALTH_FAULT + delay]
+    R1 -- Safe-mode timeout --> R4[LOG EVT SAFE_MODE + delay]
+    R1 -- Watchdog init fail --> R5[LOG EVT WDT_INIT_FAIL + immediate reboot]
+    R2 --> R6[sys_reboot]
+    R3 --> R6
+    R4 --> R6
+    R5 --> R6
+```
+
 ## Interaction With Persistence
 - Recovery clears safe-mode timers once a healthy supervisor reset occurs.
 - When safe mode triggers, the first healthy supervisor cycle clears the persistent watchdog counters so the system can exit degraded mode on the next boot.

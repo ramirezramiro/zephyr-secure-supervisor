@@ -18,6 +18,25 @@
    - Otherwise, increment the failure counter, log a degraded `EVT,WATCHDOG,...` line, and potentially request recovery.
 5. If safe mode was active and the system proves healthy, clear the persistent watchdog counters via `persist_state_clear_watchdog_history`.
 
+### Decision Tree
+
+```mermaid
+flowchart TD
+    SUP_IN[Heartbeat updates from producers] --> H1{Boot grace expired?}
+    H1 -- no --> H2[Feed watchdog 'boot window'] --> LOOP
+    H1 -- yes --> H3{LED AND system fresh?}
+    H3 -- yes --> H4[Feed watchdog]
+    H3 -- no --> H5[Increment failure count]
+    H5 --> H6{Failures ≥ threshold?}
+    H6 -- yes --> H7[Request recovery 'HEALTH_FAULT']
+    H6 -- no --> H8[Log degraded state]
+    H4 --> H9{Persistent counters cleared?}
+    H9 -- no --> H10[Clear watchdog counters]
+    H9 -- yes --> LOOP
+    H10 --> LOOP
+    H8 --> LOOP
+```
+
 ## Interfaces
 - `supervisor_notify_led/system()`: called by sensor work or other producers to mark heartbeats fresh.
 - `supervisor_request_manual_recovery()`: used by UART CLI when commands should immediately reboot.

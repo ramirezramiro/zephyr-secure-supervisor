@@ -12,6 +12,7 @@
 
 #include <zephyr/device.h>
 #include <zephyr/drivers/flash.h>
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/storage/flash_map.h>
@@ -19,12 +20,19 @@
 
 LOG_MODULE_REGISTER(persist_state, LOG_LEVEL_INF);
 
-#define PERSIST_MAGIC 0x4C454452u /* 'LEDR' */
+#define PERSIST_MAGIC 0x4C454453u /* 'LEDS' */
 #define PERSIST_RECORD_ID 1
+#define PERSIST_CURVE_SECRET_ID 2
+#define PERSIST_CURVE_SECRET_MAGIC 0x43555256u /* 'CURV' */
 
 #define STORAGE_PARTITION_NODE DT_NODELABEL(storage_partition)
 #define PERSIST_RETRY_LIMIT 3
 #define PERSIST_RETRY_DELAY_MS 10
+
+struct persist_curve_secret {
+	uint32_t magic;
+	uint8_t secret[CURVE25519_KEY_SIZE];
+};
 
 static struct {
 	struct nvs_fs fs;
@@ -34,6 +42,90 @@ static struct {
 
 static K_MUTEX_DEFINE(state_lock);
 
+#if IS_ENABLED(CONFIG_APP_CRYPTO_BACKEND_CURVE25519)
+static int hex_nibble(char c)
+{
+	if (c >= '0' && c <= '9') {
+		return c - '0';
+	}
+	if (c >= 'a' && c <= 'f') {
+		return 10 + (c - 'a');
+	}
+	if (c >= 'A' && c <= 'F') {
+		return 10 + (c - 'A');
+	}
+	return -1;
+}
+
+static int parse_hex_secret(const char *hex, uint8_t *out, size_t len)
+{
+	if (hex == NULL || hex[0] == '\0') {
+		return -ENOENT;
+	}
+
+	size_t exp_len = len * 2U;
+	size_t actual = strlen(hex);
+	if (actual != exp_len) {
+		return -EINVAL;
+	}
+
+	for (size_t i = 0U; i < len; i++) {
+		int hi = hex_nibble(hex[i * 2U]);
+		int lo = hex_nibble(hex[i * 2U + 1U]);
+		if (hi < 0 || lo < 0) {
+			return -EINVAL;
+		}
+		out[i] = (uint8_t)((hi << 4) | lo);
+	}
+	return 0;
+}
+
+static void derive_scalar_from_device_id(uint8_t *buf)
+{
+	uint32_t seed = 0x6d5a56a1U;
+	ssize_t len = -ENOSYS;
+
+#if IS_ENABLED(CONFIG_HWINFO)
+	uint8_t dev_id[16];
+
+	len = hwinfo_get_device_id(dev_id, sizeof(dev_id));
+	if (len > 0) {
+		for (ssize_t i = 0; i < len; i++) {
+			seed ^= ((uint32_t)dev_id[i] << ((i & 0x3) * 8));
+			seed = seed * 1664525U + 1013904223U;
+		}
+	} else {
+		len = -ENODATA;
+	}
+#endif
+
+	if (len <= 0) {
+		seed ^= 0xC3A5C85CU;
+	}
+
+	for (size_t i = 0U; i < CURVE25519_KEY_SIZE; i += sizeof(uint32_t)) {
+		seed = seed * 1664525U + 1013904223U;
+		size_t copy = MIN(sizeof(uint32_t), CURVE25519_KEY_SIZE - i);
+		memcpy(&buf[i], &seed, copy);
+	}
+}
+
+static int curve_secret_generate(uint8_t secret[CURVE25519_KEY_SIZE])
+{
+	int rc = parse_hex_secret(CONFIG_APP_CURVE25519_STATIC_SECRET_HEX,
+				  secret, CURVE25519_KEY_SIZE);
+	if (rc == 0) {
+		LOG_INF("Curve25519 scalar seeded from CONFIG_APP_CURVE25519_STATIC_SECRET_HEX");
+		curve25519_ref10_clamp_scalar(secret);
+		return 0;
+	}
+
+	derive_scalar_from_device_id(secret);
+	curve25519_ref10_clamp_scalar(secret);
+	LOG_INF("Curve25519 scalar derived from hardware device ID");
+	return 0;
+}
+#endif
 #if IS_ENABLED(CONFIG_APP_USE_AES_ENCRYPTION)
 static int persist_read_encrypted(struct persist_blob *out_blob)
 {
@@ -218,6 +310,7 @@ static int init_fs_if_needed(void)
 		g_state.blob.consecutive_watchdog = 0U;
 		g_state.blob.total_watchdog = 0U;
 		g_state.blob.watchdog_override_ms = 0U;
+		g_state.blob.session_counter = 0U;
 		(void)persist_commit_locked();
 	}
 
@@ -322,6 +415,70 @@ int persist_state_set_watchdog_override(uint32_t timeout_ms)
 	k_mutex_unlock(&state_lock);
 	return rc;
 }
+
+uint32_t persist_state_next_session_counter(void)
+{
+	uint32_t value = 0U;
+
+	k_mutex_lock(&state_lock, K_FOREVER);
+
+	if (init_fs_if_needed() == 0) {
+		g_state.blob.session_counter++;
+		value = g_state.blob.session_counter;
+		(void)persist_commit_locked();
+	}
+
+	k_mutex_unlock(&state_lock);
+	return value;
+}
+
+#if IS_ENABLED(CONFIG_APP_CRYPTO_BACKEND_CURVE25519)
+int persist_state_curve25519_get_secret(uint8_t out[CURVE25519_KEY_SIZE])
+{
+	if (out == NULL) {
+		return -EINVAL;
+	}
+
+	int rc = init_fs_if_needed();
+	if (rc != 0) {
+		return rc;
+	}
+
+	k_mutex_lock(&state_lock, K_FOREVER);
+
+	struct persist_curve_secret record = {0};
+	rc = nvs_read(&g_state.fs, PERSIST_CURVE_SECRET_ID, &record, sizeof(record));
+	if (rc == sizeof(record) && record.magic == PERSIST_CURVE_SECRET_MAGIC) {
+		memcpy(out, record.secret, CURVE25519_KEY_SIZE);
+		k_mutex_unlock(&state_lock);
+		return 0;
+	}
+
+	rc = curve_secret_generate(record.secret);
+	if (rc != 0) {
+		k_mutex_unlock(&state_lock);
+		return rc;
+	}
+	record.magic = PERSIST_CURVE_SECRET_MAGIC;
+
+	rc = nvs_write(&g_state.fs, PERSIST_CURVE_SECRET_ID, &record, sizeof(record));
+	if (rc < 0) {
+		LOG_ERR("Failed to persist Curve25519 scalar: %d", rc);
+		k_mutex_unlock(&state_lock);
+		return rc;
+	}
+
+	memcpy(out, record.secret, CURVE25519_KEY_SIZE);
+	k_mutex_unlock(&state_lock);
+	return 0;
+}
+#else
+int persist_state_curve25519_get_secret(uint8_t out[CURVE25519_KEY_SIZE])
+{
+	ARG_UNUSED(out);
+	return -ENOTSUP;
+}
+#endif
 
 #if defined(CONFIG_ZTEST)
 void persist_state_test_init_blob(struct persist_blob *blob,

@@ -103,12 +103,57 @@ config APP_SENSOR_SAFE_MODE_INTERVAL_MS
 	  telemetry. Set to the same value as the normal interval to keep a
 	  constant cadence.
 
+choice APP_CRYPTO_BACKEND
+	prompt "Application crypto backend"
+	default APP_CRYPTO_BACKEND_AES
+	help
+	  Select the asymmetric/symmetric helper that app_crypto.c should use.
+	  AES-CTR remains the default, while Curve25519 is an experimental
+	  placeholder that makes the code paths compile without shipping the
+	  implementation yet.
+
+config APP_CRYPTO_BACKEND_AES
+	bool "AES-CTR helper"
+
+config APP_CRYPTO_BACKEND_CURVE25519
+	bool "Curve25519 (experimental, stub only)"
+
+endchoice
+
 config APP_USE_AES_ENCRYPTION
 	bool "Enable AES encryption helper"
 	default y
 	help
 	  Enables the application-level AES helper that seals telemetry and
-	  persistent state before it is logged or transmitted.
+	  persistent state before it is logged or transmitted. The Curve25519
+	  backend reuses this helper after deriving the session key.
+
+config APP_USE_CURVE25519
+	bool "Enable Curve25519 helper (placeholder)"
+	default y
+	depends on APP_CRYPTO_BACKEND_CURVE25519
+	help
+	  Builds the Curve25519/X25519 app crypto shim. Provide static secret +
+	  peer public keys via the configs below or wire a persistence flow.
+
+config APP_CURVE25519_STATIC_SECRET_HEX
+	string "Curve25519 private scalar (hex)"
+	default "77076D0A7318A57D3C16C17251B26645DF4C2F87EBC0992AB177FBA51DB92C2A"
+	depends on APP_USE_CURVE25519
+	help
+	  32-byte private scalar encoded as 64 hex characters. On first boot the
+	  firmware copies this value into NVS, clamps it per RFC 7748, and uses it
+	  to derive the shared secret. If left empty, a scalar is derived from the
+	  hardware device ID. Provision tooling should overwrite this with
+	  per-device values.
+
+config APP_CURVE25519_STATIC_PEER_PUB_HEX
+	string "Curve25519 peer public key (hex)"
+	default "DE9EDB7D7B7DC1B4D35B61C2ECE435373F8343C85B78674DADFC7E146F882B4F"
+	depends on APP_USE_CURVE25519
+	help
+	  32-byte peer public key encoded as 64 hex characters. The shared secret
+	  derived from this key seeds the AES helper.
 
 config APP_AES_STATIC_KEY_HEX
 	string "Static AES key (hex)"

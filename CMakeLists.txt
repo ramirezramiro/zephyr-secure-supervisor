@@ -12,6 +12,7 @@ project(zephyr_secure_supervisor)
 # Add app sources explicitly
 target_sources(app PRIVATE
   src/simple_aes.c
+  $<$<BOOL:${CONFIG_APP_CRYPTO_BACKEND_CURVE25519}>:${CMAKE_CURRENT_SOURCE_DIR}/src/curve25519_ref10.c>
   src/app_crypto.c
   src/main.c
   src/sensor_hts221.c

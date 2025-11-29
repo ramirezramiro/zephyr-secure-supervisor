@@ -10,6 +10,7 @@ project(persist_state_tests)
 
 target_sources(app PRIVATE
   ${APP_ROOT}/src/app_crypto.c
+  ${APP_ROOT}/src/curve25519_ref10.c
   ${APP_ROOT}/src/simple_aes.c
   ${APP_ROOT}/src/persist_state.c
   src/main.c

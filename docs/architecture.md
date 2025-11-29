@@ -10,6 +10,20 @@ zephyr-secure-supervisor is a Zephyr 4.2 application targeting the STM32 NUCLEO-
 
 Safe mode widens timeouts and schedules an autonomous reboot while still letting the rest of the system start in a degraded configuration.
 
+### Boot Flow Diagram
+
+```mermaid
+flowchart TD
+    A[Start main] --> B[Init crypto + persistence]
+    B --> C[Init watchdog 'boot timeout']
+    C --> D{Safe mode?}
+    D -- yes --> E[Schedule safe-mode reboot, widen timeouts]
+    D -- no --> F[Use steady watchdog settings]
+    E --> G
+    F --> G
+    G[Start supervisor + recovery + sensor + UART?]
+```
+
 ## Watchdog Control Stack
 - `src/watchdog_ctrl.c` owns the STM32 IWDG channel and exposes helpers to retune the timeout (boot vs steady windows) and to feed the dog.
 - `src/supervisor.c` is the only component that calls `watchdog_feed_when_healthy`. It samples LED and system heartbeat atomics and only feeds when both are fresh.
@@ -18,15 +32,15 @@ Safe mode widens timeouts and schedules an autonomous reboot while still letting
 This separation keeps hardware ownership in one place while supervisor/recovery focus on policy.
 
 ## Persistence + Crypto
-- `src/persist_state.c` lazily mounts the NVS partition (defined in `boards/nucleo_l053r8_secure_supervisor*.overlay`), stores reset counters, and keeps watchdog override values across boots. Flash operations include retry/backoff and all failures produce `EVT,PERSIST,...` logs.
-- `src/app_crypto.c` implements CTR encryption on top of `src/simple_aes.c`. When `CONFIG_APP_USE_AES_ENCRYPTION=y`, telemetry payloads and persisted blobs are sealed before logging to UART.
+- `src/persist_state.c` lazily mounts the NVS partition (defined in `boards/nucleo_l053r8_secure_supervisor*.overlay`), stores reset counters, watchdog overrides, and (when Curve25519 is enabled) the device scalar + session counter so every boot can derive a fresh AES/MAC key. Flash operations include retry/backoff and all failures produce `EVT,PERSIST,...` logs.
+- `src/app_crypto.c` implements CTR encryption on top of `src/simple_aes.c`. In Curve25519 mode the shared secret mixes with the persisted session counter + a salt to derive both the AES key and a MAC key per boot; AES-only builds keep using the static key from Kconfig.
 - `include/safe_memory.h` wraps mem* calls with bounds-aware helpers so MISRA-inspired rules are enforced in both production code and tests.
 
 Because the cryptographic helpers are isolated, they act as the template for PQC experiments without touching supervisor/recovery/persistence code.
 
 ## Sensor + Telemetry Loop (`src/sensor_hts221.c`)
 - Runs as delayed work on Zephyr's system queue.
-- Samples the HTS221, keeps 10 plaintext readings before enabling AES output, and logs `EVT,SENSOR,...` lines.
+- Samples the HTS221, keeps 10 plaintext readings before enabling AES output, and logs `EVT,SENSOR,...` lines. When the Curve backend is active it also appends `mac=<crc>` so receivers can authenticate each frame.
 - Calls `supervisor_notify_led` and `supervisor_notify_system` whenever telemetry is produced so the watchdog has proof of liveness tied to real sensor activity.
 
 `src/log_utils.h` defines `LOG_EVT_SIMPLE` / `LOG_EVT` macros that map to Zephyr logging while preserving compact `EVT,<tag>,<status>` formatting.

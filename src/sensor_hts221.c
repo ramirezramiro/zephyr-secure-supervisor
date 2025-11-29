@@ -87,7 +87,17 @@ static void sensor_work_handler(struct k_work *work)
 			bool logged = false;
 
 			if (sample_counter == 10U) {
-				LOG_INF("Enabling AES telemetry after initial plaintext samples");
+				enum app_crypto_backend_type backend = app_crypto_get_backend();
+				const char *backend_str = "AES";
+
+				if (backend == APP_CRYPTO_BACKEND_TYPE_CURVE25519) {
+					backend_str = "Curve25519-backed AES";
+				} else if (backend == APP_CRYPTO_BACKEND_TYPE_NONE) {
+					backend_str = "plaintext (crypto disabled)";
+				}
+
+				LOG_INF("Enabling %s telemetry after initial plaintext samples",
+					backend_str);
 			}
 
 			if (use_encryption) {
@@ -98,19 +108,33 @@ static void sensor_work_handler(struct k_work *work)
 				uint8_t cipher[sizeof(payload)];
 				uint8_t iv[APP_CRYPTO_IV_LEN];
 				size_t cipher_len = 0U;
+				bool have_mac =
+					(app_crypto_get_backend() ==
+					 APP_CRYPTO_BACKEND_TYPE_CURVE25519);
+				uint32_t mac = 0U;
 				int enc_rc = app_crypto_encrypt_buffer((const uint8_t *)&payload,
 								       sizeof(payload),
 								       cipher, sizeof(cipher),
 								       &cipher_len, iv);
 				if (enc_rc == 0) {
+					if (have_mac) {
+						mac = app_crypto_compute_sample_mac(iv, cipher, cipher_len);
+					}
 					char iv_hex[APP_CRYPTO_IV_LEN * 2U + 1U];
 					char data_hex[sizeof(cipher) * 2U + 1U];
 					if (app_crypto_bytes_to_hex(iv, sizeof(iv),
 								     iv_hex, sizeof(iv_hex)) == 0 &&
 					    app_crypto_bytes_to_hex(cipher, cipher_len,
 								     data_hex, sizeof(data_hex)) == 0) {
-						LOG_EVT(INF, "SENSOR", "HTS221_SAMPLE",
-							"enc=1,iv=%s,data=%s", iv_hex, data_hex);
+						if (have_mac) {
+							LOG_EVT(INF, "SENSOR", "HTS221_SAMPLE",
+								"enc=1,iv=%s,data=%s,mac=%08X",
+								iv_hex, data_hex, mac);
+						} else {
+							LOG_EVT(INF, "SENSOR", "HTS221_SAMPLE",
+								"enc=1,iv=%s,data=%s",
+								iv_hex, data_hex);
+						}
 						logged = true;
 					} else {
 						LOG_ERR("Sensor payload hex encoding failed");

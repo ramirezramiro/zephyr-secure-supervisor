@@ -1,12 +1,18 @@
 #include "app_crypto.h"
 
 #include <errno.h>
+#include <inttypes.h>
 #include <string.h>
 
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/sys/crc.h>
 #include <zephyr/sys/util.h>
 
+#include "curve25519_ref10.h"
+#include "log_utils.h"
+#include "persist_state.h"
 #include "simple_aes.h"
 #include "safe_memory.h"
 
@@ -22,6 +28,11 @@ static bool crypto_ready;
 static atomic_t iv_counter = ATOMIC_INIT(0);
 static atomic_t prng_state = ATOMIC_INIT(0x6d5a56a1);
 static struct simple_aes_ctx aes_ctx;
+static uint8_t session_mac_key[16];
+static uint32_t session_counter;
+static uint32_t session_salt;
+
+static enum app_crypto_backend_type active_backend = APP_CRYPTO_BACKEND_TYPE_NONE;
 
 static int hex_value(char c)
 {
@@ -140,20 +151,106 @@ static void ctr_process(const uint8_t *input, uint8_t *output, size_t len,
 	}
 }
 
+static uint32_t fallback_session_salt(void)
+{
+	uint32_t seed = next_pseudo_entropy();
+	if (seed == 0U) {
+		seed = (uint32_t)k_cycle_get_32();
+	}
+	return seed;
+}
+
+static void derive_session_material(const uint8_t *shared, size_t shared_len)
+{
+	session_counter = persist_state_next_session_counter();
+	session_salt = fallback_session_salt();
+
+	for (size_t i = 0U; i < APP_CRYPTO_MAX_KEY_BYTES; i++) {
+		uint8_t ctr = (uint8_t)((session_counter >> ((i % 4U) * 8U)) & 0xFFU);
+		uint8_t saltb = (uint8_t)((session_salt >> (((i + 1U) % 4U) * 8U)) & 0xFFU);
+		key_buf[i] = shared[i % shared_len] ^ ctr ^ saltb;
+	}
+
+	for (size_t i = 0U; i < sizeof(session_mac_key); i++) {
+		uint8_t ctr = (uint8_t)((session_counter >> (((i + 2U) % 4U) * 8U)) & 0xFFU);
+		uint8_t saltb = (uint8_t)((session_salt >> (((i + 3U) % 4U) * 8U)) & 0xFFU);
+		session_mac_key[i] = shared[(i + 8U) % shared_len] ^ ctr ^ saltb;
+	}
+
+	LOG_EVT(INF, "PQC", "SESSION", "counter=%" PRIu32 ",salt=0x%08X",
+		session_counter, session_salt);
+}
+
 bool app_crypto_is_enabled(void)
 {
-	return IS_ENABLED(CONFIG_APP_USE_AES_ENCRYPTION) && crypto_ready;
+	return crypto_ready && (active_backend != APP_CRYPTO_BACKEND_TYPE_NONE);
+}
+
+enum app_crypto_backend_type app_crypto_get_backend(void)
+{
+	return active_backend;
+}
+
+uint32_t app_crypto_get_session_counter(void)
+{
+	return session_counter;
+}
+
+uint32_t app_crypto_get_session_salt(void)
+{
+	return session_salt;
 }
 
 int app_crypto_init(void)
 {
-	if (!IS_ENABLED(CONFIG_APP_USE_AES_ENCRYPTION)) {
-		crypto_ready = false;
-		return 0;
+	int rc = parse_hex_string(CONFIG_APP_AES_STATIC_IV_HEX,
+				  iv_seed, sizeof(iv_seed));
+	if (rc < 0 || (size_t)rc != APP_CRYPTO_IV_LEN) {
+		LOG_ERR("Invalid IV seed (expected %u bytes)", APP_CRYPTO_IV_LEN);
+		return rc < 0 ? rc : -EINVAL;
 	}
 
-	int rc = parse_hex_string(CONFIG_APP_AES_STATIC_KEY_HEX,
-				      key_buf, sizeof(key_buf));
+#if IS_ENABLED(CONFIG_APP_CRYPTO_BACKEND_CURVE25519)
+	active_backend = APP_CRYPTO_BACKEND_TYPE_CURVE25519;
+	uint8_t secret[CURVE25519_KEY_SIZE];
+	uint8_t peer_pub[CURVE25519_KEY_SIZE];
+	uint8_t shared[CURVE25519_KEY_SIZE];
+
+	rc = persist_state_curve25519_get_secret(secret);
+	if (rc < 0) {
+		LOG_ERR("Failed to load Curve25519 scalar: %d", rc);
+		return rc;
+	}
+	curve25519_ref10_clamp_scalar(secret);
+
+	rc = parse_hex_string(CONFIG_APP_CURVE25519_STATIC_PEER_PUB_HEX,
+			      peer_pub, sizeof(peer_pub));
+	if (rc < 0 || (size_t)rc != CURVE25519_KEY_SIZE) {
+		LOG_ERR("Invalid Curve25519 peer public key");
+		return rc < 0 ? rc : -EINVAL;
+	}
+
+	rc = curve25519_ref10_scalarmult(shared, secret, peer_pub);
+	if (rc != 0) {
+		LOG_ERR("Curve25519 shared-secret derivation failed: %d", rc);
+		return rc;
+	}
+
+	key_len = CURVE25519_KEY_SIZE;
+	derive_session_material(shared, CURVE25519_KEY_SIZE);
+
+	uint8_t local_pub[CURVE25519_KEY_SIZE];
+	curve25519_ref10_scalarmult_base(local_pub, secret);
+	LOG_INF("Curve25519 key ready (local_pub=%02X%02X%02X%02X..., peer fixed)",
+		local_pub[0], local_pub[1], local_pub[2], local_pub[3]);
+	LOG_DBG("Curve25519 shared secret prefix=%02X%02X%02X%02X",
+		shared[0], shared[1], shared[2], shared[3]);
+	LOG_INF("Curve25519 backend active (shared secret drives AES keys)");
+
+#elif IS_ENABLED(CONFIG_APP_USE_AES_ENCRYPTION)
+	active_backend = APP_CRYPTO_BACKEND_TYPE_AES;
+	rc = parse_hex_string(CONFIG_APP_AES_STATIC_KEY_HEX,
+			      key_buf, sizeof(key_buf));
 	if (rc < 0) {
 		LOG_ERR("Invalid AES key hex string: %d", rc);
 		return rc;
@@ -164,13 +261,16 @@ int app_crypto_init(void)
 		LOG_ERR("Unsupported AES key length: %zu", key_len);
 		return -EINVAL;
 	}
-
-	rc = parse_hex_string(CONFIG_APP_AES_STATIC_IV_HEX,
-			      iv_seed, sizeof(iv_seed));
-	if (rc < 0 || (size_t)rc != APP_CRYPTO_IV_LEN) {
-		LOG_ERR("Invalid IV seed (expected %u bytes)", APP_CRYPTO_IV_LEN);
-		return rc < 0 ? rc : -EINVAL;
-	}
+	session_counter = 0U;
+	session_salt = 0U;
+	memset(session_mac_key, 0, sizeof(session_mac_key));
+	LOG_INF("AES-only backend active (static key from config)");
+#else
+	active_backend = APP_CRYPTO_BACKEND_TYPE_NONE;
+	crypto_ready = false;
+	LOG_INF("Application crypto disabled (no backend selected)");
+	return 0;
+#endif
 
 	rc = simple_aes_setkey_enc(&aes_ctx, key_buf, key_len);
 	if (rc != 0) {
@@ -179,7 +279,8 @@ int app_crypto_init(void)
 	}
 
 	crypto_ready = true;
-	LOG_INF("AES helper initialized (key_len=%zu)", key_len);
+	LOG_INF("AES helper initialized (key_len=%zu, backend=%s)", key_len,
+		active_backend == APP_CRYPTO_BACKEND_TYPE_CURVE25519 ? "curve25519" : "aes");
 	return 0;
 }
 
@@ -254,4 +355,19 @@ int app_crypto_bytes_to_hex(const uint8_t *src, size_t src_len,
 
 	dst[src_len * 2U] = '\0';
 	return 0;
+}
+
+uint32_t app_crypto_compute_sample_mac(const uint8_t iv[APP_CRYPTO_IV_LEN],
+				       const uint8_t *cipher, size_t cipher_len)
+{
+	if (active_backend != APP_CRYPTO_BACKEND_TYPE_CURVE25519 || !crypto_ready) {
+		return 0U;
+	}
+
+	uint32_t crc = crc32_ieee(session_mac_key, sizeof(session_mac_key));
+	crc = crc32_ieee_update(crc, iv, APP_CRYPTO_IV_LEN);
+	crc = crc32_ieee_update(crc, cipher, cipher_len);
+	crc = crc32_ieee_update(crc, (uint8_t *)&session_counter, sizeof(session_counter));
+	crc ^= session_salt;
+	return crc;
 }
