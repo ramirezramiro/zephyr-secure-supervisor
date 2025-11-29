@@ -1,0 +1,28 @@
+*** Booting Zephyr OS build v4.2.0-6484-g196a1da504bd ***
+[00:00:00.010,000] <inf> app: EVT,APP,START
+[00:00:00.017,000] <inf> fs_nvs: 32 Sectors of 128 bytes
+[00:00:00.023,000] <inf> fs_nvs: alloc wra: 27, 58
+[00:00:00.028,000] <inf> fs_nvs: data wra: 27, 34
+[00:00:00.057,000] <inf> persist_state: Persistent state loaded: consecutive=0 total=0 override=0
+[00:00:00.776,000] <inf> app_crypto: EVT,PQC,SESSION,counter=1,salt=0x47CB2DF5
+[00:00:01.449,000] <inf> app_crypto: Curve25519 key ready (local_pub=808A7FFF..., peer fixed)
+[00:00:01.457,000] <inf> app_crypto: Curve25519 backend active (shared secret drives AES keys)
+[00:00:01.467,000] <inf> app_crypto: AES helper initialized (key_len=32, backend=curve25519)
+[00:00:01.529,000] <inf> app: EVT,WATCHDOG,CONFIGURED,boot_ms=8000,steady_ms=2000,retune_delay_ms=500
+[00:00:01.538,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_READY,interval_ms=2000,fallback=no,led=on
+[00:00:01.668,000] <inf> app: EVT,APP,READY
+[00:00:02.548,000] <wrn> supervisor: EVT,WATCHDOG,RETUNE_NOT_SUPPORTED,rc=-134
+[00:00:03.548,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,temp_mc=26000,humidity_mpc=87500
+[00:00:05.719,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,temp_mc=26000,humidity_mpc=88000
+[00:00:07.889,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,temp_mc=26000,humidity_mpc=87500
+[00:00:10.059,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25875,humidity_mpc=87500
+[00:00:12.229,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25875,humidity_mpc=87500
+[00:00:14.400,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25875,humidity_mpc=87000
+[00:00:16.570,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25875,humidity_mpc=87000
+[00:00:18.740,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25875,humidity_mpc=87000
+[00:00:20.911,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25875,humidity_mpc=87500
+[00:00:23.081,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25875,humidity_mpc=87500
+[00:00:25.251,000] <inf> sensor_hts221: Enabling Curve25519-backed AES telemetry after initial plaintext samples
+[00:00:25.263,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,enc=1,iv=CBAD87F13A1B00794A905C41,data=0282FE87E782E64F436F8AA42427FFA1,mac=6C0D7FA5
+[00:00:27.439,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,enc=1,iv=1C81B6CD10A86CD173133D54,data=B9C16869C599828F846FEEAC1F407593,mac=ABBBA80B
+[00:00:29.615,000] <inf> sensor_hts221: EVT,SENSOR,HTS221_SAMPLE,enc=1,iv=9272822541B2AE2D7C968796,data=33B55CEBE77C679BEEBB0ADC62C2EFC3,mac=435F03E3

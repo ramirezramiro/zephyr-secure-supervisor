@@ -1,0 +1,41 @@
+*** Booting Zephyr OS build v4.2.0-6484-g196a1da504bd ***
+Running TESTSUITE misra_stage1
+===================================================================
+I: 32 Sectors of 128 bytes
+I: alloc wra: 21, 50
+I: data wra: 21, 3c
+I: Persistent state loaded: consecutive=0 total=0 override=0
+I: EVT,PQC,SESSION,counter=12,salt=0x47CB2DF5
+===================================================================
+START - test_persist_state_encrypt_decrypt
+ PASS - test_persist_state_encrypt_decrypt in 0.005 seconds
+===================================================================
+START - test_persist_state_plain_copy
+ PASS - test_persist_state_plain_copy in 0.001 seconds
+===================================================================
+START - test_recovery_event_recording
+W: EVT,RECOVERY,QUEUED,reason=1(manual recovery request)
+W: EVT,RECOVERY,QUEUED,reason=0(persistent health fault)
+ PASS - test_recovery_event_recording in 0.011 seconds
+===================================================================
+START - test_safe_memory_helpers
+ PASS - test_safe_memory_helpers in 0.001 seconds
+===================================================================
+START - test_supervisor_health_snapshots
+ PASS - test_supervisor_health_snapshots in 0.001 seconds
+===================================================================
+TESTSUITE misra_stage1 succeeded
+
+------ TESTSUITE SUMMARY START ------
+
+SUITE PASS - 100.00% [misra_stage1]: pass = 5, fail = 0, skip = 0, total = 5 duration = 0.019 seconds
+ - PASS - [misra_stage1.test_persist_state_encrypt_decrypt] duration = 0.005 seconds
+ - PASS - [misra_stage1.test_persist_state_plain_copy] duration = 0.001 seconds
+ - PASS - [misra_stage1.test_recovery_event_recording] duration = 0.011 seconds
+ - PASS - [misra_stage1.test_safe_memory_helpers] duration = 0.001 seconds
+ - PASS - [misra_stage1.test_supervisor_health_snapshots] duration = 0.001 seconds
+
+------ TESTSUITE SUMMARY END ------
+
+===================================================================
+PROJECT EXECUTION SUCCESSFUL
