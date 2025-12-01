@@ -11,6 +11,8 @@ The STM32L053R8’s 8 KB SRAM budget is too tight for a true PQC primitive, so
 
 `src/app_crypto.c` and `src/simple_aes.c` still wrap every persistence + telemetry call, so moving to a higher-spec MCU (≥16 KB SRAM with secure storage) lets you swap in heavier PQC libraries without touching watchdog/sensor code. Use [docs/crypto_backends.md](docs/crypto_backends.md) for the AES vs Curve toggles, UART cues, scalar lifecycle, and MAC tagging notes; see `docs/app_crypto.md` for API details and `docs/persist_state.md` / `tests/persist_state` to validate encrypted blobs on host or hardware.
 
+> **Provisioning warning:** The repo defaults to the RFC 7748 test scalars/public keys so host/hardware runs are reproducible. Production firmware **must** provision device-unique scalars and peer keys via a factory or field jig before shipment, and the default Kconfig strings should be treated as placeholders only. See the “Provisioning workflow” note in `docs/crypto_backends.md` and the roadmap in `SECURITY_BACKLOG.md`.
+
 ## Quick Start
 
 1. `west build -b nucleo_l053r8 -p auto .`
@@ -143,6 +145,7 @@ All options live in `prj.conf` (or overlay configs) and can be overridden at bui
 - `docs/supervisor.md` / `docs/recovery.md` / `docs/watchdog_ctrl.md` – State machines and watchdog plumbing.
 - `docs/persist_state.md` / `docs/app_crypto.md` / `docs/log_utils.md` – Persistence schema, CTR helper, logging macros.
 - `docs/release.md` – Pre-release checklist (tests, artifacts, cleanup).
+- `SECURITY_BACKLOG.md` – Roadmap for provisioning, tamper logging, and key rotation improvements.
 
 ## System Architecture
 

@@ -37,6 +37,16 @@ Both backends are mutually exclusive to keep the 8 KB SRAM footprint in check.
 - Every boot logs `EVT,PQC,SESSION,counter=?,salt=?` so receivers can recompute keys deterministically.
 - `sensor_hts221.c` appends `mac=%08X` to encrypted samples. The MAC = `crc32(derived_mac_key || iv || ciphertext || counter) ^ salt`.
 
+### Provisioning Workflow
+
+- The sample `prj.conf` strings use the RFC 7748 test vectors so host and hardware runs match documentation; they are **not** secure. Replace them with per-device scalars before shipping hardware.
+- Provisioning flow of record:
+  1. During factory test, run a jig/CLI that generates a Curve25519 scalar (or ingests one from a secure element).
+  2. Clamp and write the scalar into the board via the Zephyr shell/UART command or a custom host script that uses `persist_state_curve25519_get_secret()` with a “write” path.
+  3. Store the matching peer public key in your server/backend and configure the device with the correct `CONFIG_APP_CURVE25519_STATIC_PEER_PUB_HEX` (or write it through the same jig).
+  4. Record the session counter baseline so later boots can be replay-protected.
+- Until that jig exists, treat the Kconfig strings as placeholders; shipping with the defaults makes decryption trivial. See `SECURITY_BACKLOG.md` for the roadmap on the provisioning toolchain.
+
 ### UART Cues
 
 - **AES-only boot:**
