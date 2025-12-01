@@ -86,6 +86,13 @@ That leaves roughly 600 B of headroom for logs/buffers. [Read more](docs/memor
 
 [Read more](docs/deployment.md) (`docs/deployment.md`) for full operating guidance and hardware recommendations.
 
+### Security Limitations
+
+- Current builds ship with RFC 7748 test scalars/public keys so host/hardware runs match documentation. Shipping these defaults makes telemetry trivially decryptable—production firmware **must** provision device-unique secrets via a factory jig before shipment.
+- No tamper logging or secure storage exists on STM32L053R8, so NVS corruption or scalar rollbacks go undetected.
+- Session counter persistence can be reset by wiping NVS, so anti-replay guarantees are limited.
+- `SECURITY_BACKLOG.md` tracks the provisioning workflow, tamper logging, and key rotation hooks required to remove these limitations.
+
 ## Architecture Highlights
 
 zephyr-secure-supervisor combines three always-on services:
