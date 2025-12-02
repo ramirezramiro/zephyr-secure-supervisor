@@ -223,11 +223,16 @@ int app_crypto_init(void)
 	}
 	curve25519_ref10_clamp_scalar(secret);
 
-	rc = parse_hex_string(CONFIG_APP_CURVE25519_STATIC_PEER_PUB_HEX,
-			      peer_pub, sizeof(peer_pub));
-	if (rc < 0 || (size_t)rc != CURVE25519_KEY_SIZE) {
-		LOG_ERR("Invalid Curve25519 peer public key");
-		return rc < 0 ? rc : -EINVAL;
+	int peer_rc = persist_state_curve25519_get_peer(peer_pub);
+	if (peer_rc != 0) {
+		rc = parse_hex_string(CONFIG_APP_CURVE25519_STATIC_PEER_PUB_HEX,
+				      peer_pub, sizeof(peer_pub));
+		if (rc < 0 || (size_t)rc != CURVE25519_KEY_SIZE) {
+			LOG_ERR("Invalid Curve25519 peer public key");
+			return rc < 0 ? rc : -EINVAL;
+		}
+	} else {
+		LOG_INF("Curve25519 peer public key loaded from provisioning storage");
 	}
 
 	rc = curve25519_ref10_scalarmult(shared, secret, peer_pub);

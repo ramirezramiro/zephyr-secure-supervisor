@@ -74,6 +74,114 @@ static void clear_override(void)
 		"steady_ms=%u", CONFIG_APP_WATCHDOG_STEADY_TIMEOUT_MS);
 }
 
+#if IS_ENABLED(CONFIG_APP_CRYPTO_BACKEND_CURVE25519)
+static int hex_value_cli(char c)
+{
+	if (c >= '0' && c <= '9') {
+		return c - '0';
+	}
+	if (c >= 'a' && c <= 'f') {
+		return 10 + (c - 'a');
+	}
+	if (c >= 'A' && c <= 'F') {
+		return 10 + (c - 'A');
+	}
+	return -1;
+}
+
+static int decode_hex_token(const char *token, size_t len,
+			    uint8_t *out, size_t out_len)
+{
+	if (token == NULL || len != (out_len * 2U)) {
+		return -EINVAL;
+	}
+
+	for (size_t i = 0U; i < out_len; i++) {
+		int hi = hex_value_cli(token[i * 2U]);
+		int lo = hex_value_cli(token[i * 2U + 1U]);
+
+		if (hi < 0 || lo < 0) {
+			return -EINVAL;
+		}
+
+		out[i] = (uint8_t)((hi << 4) | lo);
+	}
+
+	return 0;
+}
+
+static const char *skip_spaces(const char *s)
+{
+	while (*s != '\0' && isspace((unsigned char)*s)) {
+		s++;
+	}
+	return s;
+}
+
+static void handle_provision_command(const char *args)
+{
+	args = skip_spaces(args);
+	if (strncmp(args, "curve", 5) != 0) {
+		LOG_EVT(WRN, "PROVISION", "UNKNOWN_TARGET", "body=%s", args);
+		return;
+	}
+
+	args = skip_spaces(args + 5);
+	if (*args == '\0') {
+		LOG_EVT(WRN, "PROVISION", "MISSING_SCALAR", "");
+		return;
+	}
+
+	const char *scalar_tok = args;
+	size_t scalar_len = 0U;
+	while (args[scalar_len] != '\0' && !isspace((unsigned char)args[scalar_len])) {
+		scalar_len++;
+	}
+
+	args = skip_spaces(args + scalar_len);
+	const char *peer_tok = NULL;
+	size_t peer_len = 0U;
+	if (*args != '\0') {
+		peer_tok = args;
+		while (args[peer_len] != '\0' && !isspace((unsigned char)args[peer_len])) {
+			peer_len++;
+		}
+	}
+
+	uint8_t buffer[CURVE25519_KEY_SIZE];
+	if (decode_hex_token(scalar_tok, scalar_len, buffer, CURVE25519_KEY_SIZE) != 0) {
+		LOG_EVT(WRN, "PROVISION", "SCALAR_PARSE_FAIL", "len=%zu", scalar_len);
+		return;
+	}
+
+	int rc = persist_state_curve25519_set_secret(buffer);
+	if (rc != 0) {
+		LOG_ERR("Failed to persist Curve25519 scalar: %d", rc);
+		return;
+	}
+
+	if (peer_tok != NULL) {
+		if (peer_len != CURVE25519_KEY_SIZE * 2U) {
+			LOG_EVT(WRN, "PROVISION", "PEER_LEN_BAD", "len=%zu", peer_len);
+			return;
+		}
+		if (decode_hex_token(peer_tok, peer_len, buffer, CURVE25519_KEY_SIZE) != 0) {
+			LOG_EVT(WRN, "PROVISION", "PEER_PARSE_FAIL", "");
+			return;
+		}
+		rc = persist_state_curve25519_set_peer(buffer);
+		if (rc != 0) {
+			LOG_ERR("Failed to persist Curve25519 peer key: %d", rc);
+			return;
+		}
+	}
+
+	LOG_EVT(INF, "PROVISION", "CURVE25519_UPDATED",
+		"peer_updated=%s", peer_tok ? "yes" : "no");
+	LOG_INF("Reboot the board to load the new Curve25519 material");
+}
+#endif
+
 static void handle_line(const char *line)
 {
 	while (isspace((unsigned char)*line)) {
@@ -84,40 +192,47 @@ static void handle_line(const char *line)
 		return;
 	}
 
-	if (strncmp(line, "wdg", 3) != 0) {
-		LOG_EVT(WRN, "UART_CMD", "UNKNOWN", "cmd=%s", line);
+	if (strncmp(line, "wdg", 3) == 0) {
+		line += 3;
+		while (isspace((unsigned char)*line)) {
+			line++;
+		}
+
+		if (*line == '?') {
+			print_status();
+			return;
+		}
+
+		if (strncmp(line, "clear", 5) == 0) {
+			clear_override();
+			return;
+		}
+
+		errno = 0;
+		char *end = NULL;
+		unsigned long val = strtoul(line, &end, 10);
+		if (errno || end == line) {
+			LOG_EVT(WRN, "UART_CMD", "PARSE_FAIL", "arg=%s", line);
+			return;
+		}
+
+		if (*end != '\0' && !isspace((unsigned char)*end)) {
+			LOG_EVT(WRN, "UART_CMD", "GARBAGE_TRAILING", "suffix=%s", end);
+			return;
+		}
+
+		apply_timeout((uint32_t)val);
 		return;
 	}
 
-	line += 3;
-	while (isspace((unsigned char)*line)) {
-		line++;
-	}
-
-	if (*line == '?') {
-		print_status();
+#if IS_ENABLED(CONFIG_APP_CRYPTO_BACKEND_CURVE25519)
+	if (strncmp(line, "prov", 4) == 0) {
+		handle_provision_command(line + 4);
 		return;
 	}
+#endif
 
-	if (strncmp(line, "clear", 5) == 0) {
-		clear_override();
-		return;
-	}
-
-	errno = 0;
-	char *end = NULL;
-	unsigned long val = strtoul(line, &end, 10);
-	if (errno || end == line) {
-		LOG_EVT(WRN, "UART_CMD", "PARSE_FAIL", "arg=%s", line);
-		return;
-	}
-
-	if (*end != '\0' && !isspace((unsigned char)*end)) {
-		LOG_EVT(WRN, "UART_CMD", "GARBAGE_TRAILING", "suffix=%s", end);
-		return;
-	}
-
-	apply_timeout((uint32_t)val);
+	LOG_EVT(WRN, "UART_CMD", "UNKNOWN", "cmd=%s", line);
 }
 
 static void command_thread(void *p1, void *p2, void *p3)

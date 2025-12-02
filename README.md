@@ -91,6 +91,7 @@ That leaves roughly 600 B of headroom for logs/buffers. [Read more](docs/memor
 - Current builds ship with RFC 7748 test scalars/public keys so host/hardware runs match documentation. Shipping these defaults makes telemetry trivially decryptable—production firmware **must** provision device-unique secrets via a factory jig before shipment.
 - No tamper logging or secure storage exists on STM32L053R8, so NVS corruption or scalar rollbacks go undetected.
 - Session counter persistence can be reset by wiping NVS, so anti-replay guarantees are limited.
+- A temporary UART provisioning command (`prov curve <scalar> [peer]`) is available when `CONFIG_APP_ENABLE_UART_COMMANDS=y`; use it to write new secrets, then disable the CLI to reclaim SRAM.
 - `SECURITY_BACKLOG.md` tracks the provisioning workflow, tamper logging, and key rotation hooks required to remove these limitations.
 
 ## Architecture Highlights

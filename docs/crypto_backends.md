@@ -42,10 +42,24 @@ Both backends are mutually exclusive to keep the 8 KB SRAM footprint in check.
 - The sample `prj.conf` strings use the RFC 7748 test vectors so host and hardware runs match documentation; they are **not** secure. Replace them with per-device scalars before shipping hardware.
 - Provisioning flow of record:
   1. During factory test, run a jig/CLI that generates a Curve25519 scalar (or ingests one from a secure element).
-  2. Clamp and write the scalar into the board via the Zephyr shell/UART command or a custom host script that uses `persist_state_curve25519_get_secret()` with a “write” path.
+  2. Clamp and write the scalar into the board via the UART provisioning command or a custom host script that uses `persist_state_curve25519_*` helpers.
   3. Store the matching peer public key in your server/backend and configure the device with the correct `CONFIG_APP_CURVE25519_STATIC_PEER_PUB_HEX` (or write it through the same jig).
   4. Record the session counter baseline so later boots can be replay-protected.
 - Until that jig exists, treat the Kconfig strings as placeholders; shipping with the defaults makes decryption trivial. See `SECURITY_BACKLOG.md` for the roadmap on the provisioning toolchain.
+
+#### Built-in provisioning command
+
+- Temporarily enable the UART CLI (`CONFIG_APP_ENABLE_UART_COMMANDS=y`), rebuild, and flash the board.
+- Connect to `/dev/ttyACM0 @ 115200` and run:
+  ```
+  prov curve <64-hex-byte-scalar> [<64-hex-byte-peer>]
+  ```
+  The scalar is clamped and written to NVS; the optional peer key is stored alongside it. Reboot to load the new material.
+- Example host command:
+  ```bash
+  echo "prov curve AABBCCDDEEFF...0011 11223344...EEFF" | sudo tee /dev/ttyACM0 > /dev/null
+  ```
+- Disable the UART CLI afterwards (`CONFIG_APP_ENABLE_UART_COMMANDS=n`) to reclaim SRAM for production firmware.
 
 ### UART Cues
 

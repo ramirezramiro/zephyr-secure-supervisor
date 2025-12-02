@@ -18,6 +18,9 @@ uint32_t persist_state_get_watchdog_override(void);
 int persist_state_set_watchdog_override(uint32_t timeout_ms);
 
 int persist_state_curve25519_get_secret(uint8_t out[CURVE25519_KEY_SIZE]);
+int persist_state_curve25519_set_secret(const uint8_t secret[CURVE25519_KEY_SIZE]);
+int persist_state_curve25519_get_peer(uint8_t out[CURVE25519_KEY_SIZE]);
+int persist_state_curve25519_set_peer(const uint8_t peer[CURVE25519_KEY_SIZE]);
 uint32_t persist_state_next_session_counter(void);
 
 #if defined(CONFIG_ZTEST)

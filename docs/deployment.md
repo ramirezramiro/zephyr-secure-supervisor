@@ -27,6 +27,7 @@
 ## Operating Guidance on the L053R8
 
 - Keep per-device scalars provisioned via NVS and rotate session salts on every boot.
+- For manual provisioning, temporarily enable `CONFIG_APP_ENABLE_UART_COMMANDS`, flash, run `prov curve <scalar> [peer]` over `/dev/ttyACM0`, reboot, and then disable the CLI to reclaim SRAM.
 - Capture the UART `EVT,PQC,SESSION,...` log for audit trails; this is the only way to reproduce the derived AES/MAC keys.
 - Use the Misra hardware ztests (`tests/unit/misra_stage1`) after every persistence/crypto change to ensure the tiny SRAM plan still holds.
 - Track outstanding hardening tasks (tamper logging, key rotation hooks) in `SECURITY_BACKLOG.md` so deployments know the current limits.

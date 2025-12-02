@@ -24,6 +24,8 @@ LOG_MODULE_REGISTER(persist_state, LOG_LEVEL_INF);
 #define PERSIST_RECORD_ID 1
 #define PERSIST_CURVE_SECRET_ID 2
 #define PERSIST_CURVE_SECRET_MAGIC 0x43555256u /* 'CURV' */
+#define PERSIST_CURVE_PEER_ID 3
+#define PERSIST_CURVE_PEER_MAGIC 0x43555250u /* 'CURP' */
 
 #define STORAGE_PARTITION_NODE DT_NODELABEL(storage_partition)
 #define PERSIST_RETRY_LIMIT 3
@@ -32,6 +34,11 @@ LOG_MODULE_REGISTER(persist_state, LOG_LEVEL_INF);
 struct persist_curve_secret {
 	uint32_t magic;
 	uint8_t secret[CURVE25519_KEY_SIZE];
+};
+
+struct persist_curve_peer {
+	uint32_t magic;
+	uint8_t peer[CURVE25519_KEY_SIZE];
 };
 
 static struct {
@@ -472,10 +479,113 @@ int persist_state_curve25519_get_secret(uint8_t out[CURVE25519_KEY_SIZE])
 	k_mutex_unlock(&state_lock);
 	return 0;
 }
+
+int persist_state_curve25519_set_secret(const uint8_t secret[CURVE25519_KEY_SIZE])
+{
+	if (secret == NULL) {
+		return -EINVAL;
+	}
+
+	struct persist_curve_secret record = {
+		.magic = PERSIST_CURVE_SECRET_MAGIC
+	};
+
+	memcpy(record.secret, secret, CURVE25519_KEY_SIZE);
+	curve25519_ref10_clamp_scalar(record.secret);
+
+	k_mutex_lock(&state_lock, K_FOREVER);
+
+	int rc = init_fs_if_needed();
+	if (rc == 0) {
+		rc = nvs_write(&g_state.fs, PERSIST_CURVE_SECRET_ID,
+			       &record, sizeof(record));
+		if (rc < 0) {
+			LOG_ERR("Failed to write Curve25519 scalar: %d", rc);
+		} else {
+			rc = 0;
+			LOG_INF("Curve25519 scalar updated via provisioning command");
+		}
+	}
+
+	k_mutex_unlock(&state_lock);
+	return rc;
+}
+
+int persist_state_curve25519_get_peer(uint8_t out[CURVE25519_KEY_SIZE])
+{
+	if (out == NULL) {
+		return -EINVAL;
+	}
+
+	int rc = init_fs_if_needed();
+	if (rc != 0) {
+		return rc;
+	}
+
+	k_mutex_lock(&state_lock, K_FOREVER);
+
+	struct persist_curve_peer record = {0};
+	rc = nvs_read(&g_state.fs, PERSIST_CURVE_PEER_ID, &record, sizeof(record));
+	if (rc == sizeof(record) && record.magic == PERSIST_CURVE_PEER_MAGIC) {
+		memcpy(out, record.peer, CURVE25519_KEY_SIZE);
+		k_mutex_unlock(&state_lock);
+		return 0;
+	}
+
+	k_mutex_unlock(&state_lock);
+	return -ENOENT;
+}
+
+int persist_state_curve25519_set_peer(const uint8_t peer[CURVE25519_KEY_SIZE])
+{
+	if (peer == NULL) {
+		return -EINVAL;
+	}
+
+	struct persist_curve_peer record = {
+		.magic = PERSIST_CURVE_PEER_MAGIC
+	};
+	memcpy(record.peer, peer, CURVE25519_KEY_SIZE);
+
+	k_mutex_lock(&state_lock, K_FOREVER);
+
+	int rc = init_fs_if_needed();
+	if (rc == 0) {
+		rc = nvs_write(&g_state.fs, PERSIST_CURVE_PEER_ID,
+			       &record, sizeof(record));
+		if (rc < 0) {
+			LOG_ERR("Failed to write Curve25519 peer key: %d", rc);
+		} else {
+			rc = 0;
+			LOG_INF("Curve25519 peer public key updated via provisioning command");
+		}
+	}
+
+	k_mutex_unlock(&state_lock);
+	return rc;
+}
 #else
 int persist_state_curve25519_get_secret(uint8_t out[CURVE25519_KEY_SIZE])
 {
 	ARG_UNUSED(out);
+	return -ENOTSUP;
+}
+
+int persist_state_curve25519_set_secret(const uint8_t secret[CURVE25519_KEY_SIZE])
+{
+	ARG_UNUSED(secret);
+	return -ENOTSUP;
+}
+
+int persist_state_curve25519_get_peer(uint8_t out[CURVE25519_KEY_SIZE])
+{
+	ARG_UNUSED(out);
+	return -ENOTSUP;
+}
+
+int persist_state_curve25519_set_peer(const uint8_t peer[CURVE25519_KEY_SIZE])
+{
+	ARG_UNUSED(peer);
 	return -ENOTSUP;
 }
 #endif
