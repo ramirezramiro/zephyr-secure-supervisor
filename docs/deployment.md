@@ -4,7 +4,10 @@
 
 - Treat the Curve25519-backed build as a **minimum-viable implementation**. It demonstrates per-device scalars, per-boot session keys, and MAC tagging on an 8 KB MCU, but has almost no spare SRAM and no hardware-backed secure storage.
 - The AES-only path (`CONFIG_APP_CRYPTO_BACKEND_AES=y`, Curve disabled) regains ~1 KB of RAM and skips the ladder. It can be production-ready for constrained deployments **only** when static AES keys are acceptable.
-- **Provisioning requirement:** Replace the bundled RFC 7748 test vectors with device-unique scalars/public keys via a provisioning jig before deployment. See `docs/crypto_backends.md` for guidance and `SECURITY_BACKLOG.md` for the roadmap.
+- **Provisioning requirement:** Replace the bundled RFC 7748 test vectors with device-unique scalars/public keys via a provisioning jig before deployment. The provisioning overlay (`prj_provision.conf`) now supports two flows:
+  - `CONFIG_APP_PROVISION_AUTO_PERSIST=y` (default) decodes `CONFIG_APP_CURVE25519_STATIC_*` at boot and writes them into NVS automatically. Edit those strings per device (or run `./tools/update_provision_overlay.py --overlay prj_provision.conf` to pull the latest entry from `~/.helium_provision/curve_keys.json`), flash the provisioning image once, observe `app: Provision auto-persist secret=ok peer=ok`, then flash the production image.
+  - Disable `CONFIG_APP_PROVISION_AUTO_PERSIST` to fall back to the UART CLI (`prov curve …`) when interactive provisioning is required.
+  See `docs/crypto_backends.md` for guidance and `SECURITY_BACKLOG.md` for the roadmap.
 
 ### Where Static AES Is Acceptable
 
@@ -26,7 +29,7 @@
 
 ## Operating Guidance on the L053R8
 
-- Keep per-device scalars provisioned via NVS and rotate session salts on every boot.
+- Keep per-device scalars provisioned via NVS and rotate session salts on every boot. The provisioning overlay’s auto-persist helper should only run on factory images; production builds must not overwrite NVS.
 - For manual provisioning, temporarily enable `CONFIG_APP_ENABLE_UART_COMMANDS`, flash, run `prov curve <scalar> [peer]` over `/dev/ttyACM0`, reboot, and then disable the CLI to reclaim SRAM.
 - Capture the UART `EVT,PQC,SESSION,...` log for audit trails; this is the only way to reproduce the derived AES/MAC keys.
 - Use the Misra hardware ztests (`tests/unit/misra_stage1`) after every persistence/crypto change to ensure the tiny SRAM plan still holds.

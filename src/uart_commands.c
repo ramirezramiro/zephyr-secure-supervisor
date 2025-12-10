@@ -19,13 +19,120 @@ LOG_MODULE_REGISTER(uart_cmd, LOG_LEVEL_INF);
 
 #if IS_ENABLED(CONFIG_APP_ENABLE_UART_COMMANDS)
 
+#if IS_ENABLED(CONFIG_APP_PROVISION_BUILD)
+#define CMD_STACK_SIZE CONFIG_APP_PROVISION_CMD_STACK
+#define CMD_BUFFER_LEN CONFIG_APP_PROVISION_CMD_BUFFER
+#else
 #define CMD_STACK_SIZE 288
+#if IS_ENABLED(CONFIG_APP_CRYPTO_BACKEND_CURVE25519)
+/* prov curve <scalar> [peer] plus delimiters. */
+#define CMD_BUFFER_LEN (16 + (CURVE25519_KEY_SIZE * 4))
+#else
+#define CMD_BUFFER_LEN 48
+#endif
+#endif
 #define CMD_THREAD_PRIORITY 9
 
 K_THREAD_STACK_DEFINE(cmd_stack, CMD_STACK_SIZE);
 static struct k_thread cmd_thread;
 static bool cmd_safe_mode_active;
 static const struct device *uart_dev;
+
+static const char *skip_spaces(const char *s);
+
+#if IS_ENABLED(CONFIG_APP_CRYPTO_BACKEND_CURVE25519)
+static char prov_accum[CMD_BUFFER_LEN];
+static size_t prov_accum_len;
+
+static void prov_accum_reset(void)
+{
+	prov_accum_len = 0U;
+	prov_accum[0] = '\0';
+}
+
+static void prov_accum_abort(void)
+{
+	if (prov_accum_len > 0U) {
+		LOG_EVT(WRN, "PROVISION", "INCOMPLETE_CHUNK",
+			"len=%zu,head=%.*s",
+			prov_accum_len,
+			(int)MIN(prov_accum_len, 16U),
+			prov_accum);
+		prov_accum_reset();
+	}
+}
+
+static void prov_accum_append(const char *chunk)
+{
+	if (prov_accum_len >= sizeof(prov_accum) - 1U) {
+		LOG_EVT(WRN, "PROVISION", "BUFFER_OVERFLOW", "len=%zu", prov_accum_len);
+		prov_accum_reset();
+		return;
+	}
+
+	if (prov_accum_len != 0U) {
+		prov_accum[prov_accum_len++] = ' ';
+	}
+
+	while (*chunk != '\0' && prov_accum_len < sizeof(prov_accum) - 1U) {
+		prov_accum[prov_accum_len++] = *chunk++;
+	}
+
+	if (*chunk != '\0') {
+		LOG_EVT(WRN, "PROVISION", "BUFFER_TRUNCATED", "");
+		prov_accum_len = sizeof(prov_accum) - 1U;
+	}
+
+	prov_accum[prov_accum_len] = '\0';
+	LOG_DBG("prov_accum len=%zu head=%.*s",
+		prov_accum_len,
+		(int)MIN(prov_accum_len, 32U),
+		prov_accum);
+}
+
+static bool prov_command_complete(const char *line)
+{
+	const char *cursor = skip_spaces(line);
+
+	if (strncmp(cursor, "prov", 4) != 0) {
+		return true;
+	}
+
+	cursor = skip_spaces(cursor + 4);
+	if (strncmp(cursor, "curve", 5) != 0) {
+		return true;
+	}
+
+	cursor = skip_spaces(cursor + 5);
+
+	size_t scalar_len = 0U;
+	while (cursor[scalar_len] != '\0' &&
+	       !isspace((unsigned char)cursor[scalar_len])) {
+		scalar_len++;
+	}
+
+	if (scalar_len < CURVE25519_KEY_SIZE * 2U) {
+		return false;
+	}
+
+	cursor = skip_spaces(cursor + scalar_len);
+	if (*cursor == '\0') {
+		return true;
+	}
+
+	size_t peer_len = 0U;
+	while (cursor[peer_len] != '\0' &&
+	       !isspace((unsigned char)cursor[peer_len])) {
+		peer_len++;
+	}
+
+	if (peer_len < CURVE25519_KEY_SIZE * 2U) {
+		return false;
+	}
+
+	return true;
+}
+#endif
 
 static void print_status(void)
 {
@@ -148,6 +255,10 @@ static void handle_provision_command(const char *args)
 		}
 	}
 
+	LOG_EVT(INF, "PROVISION", "CURVE_CMD_RX",
+		"scalar_len=%zu,peer_len=%zu,raw=%.*s",
+		scalar_len, peer_len, (int)(scalar_len + (peer_tok ? peer_len + 1U : 0U)), scalar_tok);
+
 	uint8_t buffer[CURVE25519_KEY_SIZE];
 	if (decode_hex_token(scalar_tok, scalar_len, buffer, CURVE25519_KEY_SIZE) != 0) {
 		LOG_EVT(WRN, "PROVISION", "SCALAR_PARSE_FAIL", "len=%zu", scalar_len);
@@ -184,6 +295,15 @@ static void handle_provision_command(const char *args)
 
 static void handle_line(const char *line)
 {
+	size_t raw_len = strlen(line);
+	LOG_HEXDUMP_INF(line, raw_len, "UART_CMD raw line");
+	size_t preview_len = raw_len < 64U ? raw_len : 64U;
+	char preview[65];
+	memcpy(preview, line, preview_len);
+	preview[preview_len] = '\0';
+	LOG_INF("UART_CMD line_str=%s%s", preview,
+		raw_len > preview_len ? "…" : "");
+
 	while (isspace((unsigned char)*line)) {
 		line++;
 	}
@@ -192,8 +312,14 @@ static void handle_line(const char *line)
 		return;
 	}
 
-	if (strncmp(line, "wdg", 3) == 0) {
-		line += 3;
+#if IS_ENABLED(CONFIG_APP_CRYPTO_BACKEND_CURVE25519)
+	if (prov_accum_len > 0U && strncmp(line, "prov", 4) != 0) {
+		prov_accum_abort();
+	}
+#endif
+
+    if (strncmp(line, "wdg", 3) == 0) {
+        line += 3;
 		while (isspace((unsigned char)*line)) {
 			line++;
 		}
@@ -227,7 +353,21 @@ static void handle_line(const char *line)
 
 #if IS_ENABLED(CONFIG_APP_CRYPTO_BACKEND_CURVE25519)
 	if (strncmp(line, "prov", 4) == 0) {
-		handle_provision_command(line + 4);
+		prov_accum_reset();
+		prov_accum_append(line);
+		if (prov_command_complete(prov_accum)) {
+			handle_provision_command(prov_accum + 4);
+			prov_accum_reset();
+		}
+		return;
+	}
+
+	if (prov_accum_len > 0U) {
+		prov_accum_append(line);
+		if (prov_command_complete(prov_accum)) {
+			handle_provision_command(prov_accum + 4);
+			prov_accum_reset();
+		}
 		return;
 	}
 #endif
@@ -243,7 +383,7 @@ static void command_thread(void *p1, void *p2, void *p3)
 
 	k_thread_name_set(k_current_get(), "uart_cmd");
 
-	char buffer[48];
+	char buffer[CMD_BUFFER_LEN];
 	size_t len = 0U;
 
 	LOG_EVT(INF, "UART_CMD", "READY",
@@ -257,6 +397,8 @@ static void command_thread(void *p1, void *p2, void *p3)
 			continue;
 		}
 
+		LOG_DBG("uart_cmd ch=0x%02x (%c)",
+			ch, isprint(ch) ? ch : '.');
 		if (ch == '\r' || ch == '\n') {
 			if (len > 0U) {
 				buffer[len] = '\0';
@@ -281,6 +423,9 @@ void uart_commands_start(bool safe_mode_active)
 		LOG_ERR("Console UART not ready; disabling command handler");
 		return;
 	}
+
+	LOG_INF("uart_cmd thread starting (safe_mode=%s)",
+		cmd_safe_mode_active ? "yes" : "no");
 
 	k_thread_create(&cmd_thread, cmd_stack, K_THREAD_STACK_SIZEOF(cmd_stack),
 			command_thread, NULL, NULL, NULL, CMD_THREAD_PRIORITY, 0,

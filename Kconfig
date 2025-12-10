@@ -1,4 +1,4 @@
-menu "LED Threads Application"
+menu "zephyr-secure-supervisor Kconfig application"
 
 config APP_WATCHDOG_BOOT_TIMEOUT_MS
 	int "Boot watchdog timeout (ms)"
@@ -32,11 +32,11 @@ config APP_RESET_WATCHDOG_THRESHOLD
 	  Number of consecutive watchdog resets that triggers fallback mode.
 
 config APP_HEALTH_LED_STALE_MS
-	int "LED heartbeat stale threshold (ms)"
+	int "Visual heartbeat stale threshold (ms)"
 	default 1500
 	range 100 10000
 	help
-	  Maximum allowed age of the LED thread heartbeat before it is
+	  Maximum allowed age of the visible heartbeat thread before it is
 	  considered stale.
 
 config APP_HEALTH_SYS_STALE_MS
@@ -53,6 +53,24 @@ config APP_ENABLE_UART_COMMANDS
 	help
 	  Enable a minimal UART command parser for runtime configuration of
 	  watchdog parameters. Disable if RAM usage is too tight.
+
+config APP_PROVISION_GDB_HELPERS
+	bool "Enable GDB provisioning helpers"
+	default y if APP_PROVISION_BUILD
+	help
+	  Keeps tiny global buffers in the image so external tools (for example,
+	  scripted GDB sessions) can copy Curve25519 material into RAM and call
+	  the persistence helpers directly. Disable this outside provisioning
+	  builds to squeeze out a handful of bytes of SRAM/flash.
+
+config APP_PROVISION_BUILD
+	bool "Provisioning build (UART CLI focus)"
+	default n
+	help
+	  Select this when building a temporary provisioning image. The build
+	  trims non-essential workloads (sensor thread, heartbeat cadence) and upsizes
+	  the UART command stack so the Curve25519 provisioning command can run
+	  safely within 8 KB SRAM. Keep this set to 'n' for production images.
 
 config APP_SAFE_MODE_REBOOT_DELAY_MS
 	int "Safe-mode auto reboot delay (ms)"
@@ -171,6 +189,33 @@ config APP_AES_STATIC_IV_HEX
 	help
 	  96-bit initial IV that is mixed with a runtime counter when the RNG
 	  is unavailable. Provide a 24-character hex string (12 bytes).
+
+config APP_PROVISION_CMD_BUFFER
+	int "Provisioning UART command buffer size"
+	default 512
+	depends on APP_ENABLE_UART_COMMANDS
+	help
+	  Size, in bytes, of the UART command line buffer during provisioning
+	  builds. Increase this when sending large ASCII payloads (e.g., prov curve
+	  commands) to avoid truncation.
+
+config APP_PROVISION_CMD_STACK
+	int "Provisioning UART command thread stack size"
+	default 2048
+	depends on APP_ENABLE_UART_COMMANDS
+	help
+	  Stack size, in bytes, for the UART command handler when provisioning
+	  builds are enabled. Larger values help absorb complex parsing logic.
+
+config APP_PROVISION_AUTO_PERSIST
+	bool "Auto-persist Curve25519 keys on boot"
+	default y
+	depends on APP_PROVISION_BUILD && APP_CRYPTO_BACKEND_CURVE25519
+	help
+	  When enabled, the provisioning firmware decodes the build-time
+	  CONFIG_APP_CURVE25519_STATIC_* hex strings and writes them into NVS
+	  automatically on each boot. This provides a simple provisioning path
+	  even when UART provisioning is unavailable.
 
 endmenu
 

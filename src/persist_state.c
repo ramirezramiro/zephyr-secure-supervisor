@@ -47,6 +47,14 @@ static struct {
 	bool loaded;
 } g_state;
 
+#if IS_ENABLED(CONFIG_APP_PROVISION_GDB_HELPERS)
+/* Tiny staging buffers that the provisioning GDB script pokes. */
+__attribute__((used, externally_visible, visibility("default")))
+uint8_t gdb_curve_secret_buf[CURVE25519_KEY_SIZE];
+__attribute__((used, externally_visible, visibility("default")))
+uint8_t gdb_curve_peer_buf[CURVE25519_KEY_SIZE];
+#endif
+
 static K_MUTEX_DEFINE(state_lock);
 
 #if IS_ENABLED(CONFIG_APP_CRYPTO_BACKEND_CURVE25519)

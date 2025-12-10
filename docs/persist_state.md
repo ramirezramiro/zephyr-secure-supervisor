@@ -8,6 +8,7 @@
 - `session_counter` – monotonic counter the Curve25519 backend uses when deriving per-boot AES/MAC keys.
 - Curve25519 device scalar record (`CURV` slot) so every board keeps a unique keypair across reboots.
 - Validation blob so the code knows when flash contains a fully written state block.
+- (Provisioning builds only) Curve25519 peer public key update when the provisioning overlay auto-persists `CONFIG_APP_CURVE25519_STATIC_PEER_PUB_HEX`.
 
 ## Behaviors
 1. Lazily mounts the `storage_partition` defined in the NUCLEO overlay (`boards/nucleo_l053r8_secure_supervisor*.overlay`).
@@ -33,3 +34,7 @@ flowchart TD
 
 ## Testing
 See `tests/persist_state` (native_sim) and `tests/unit/misra_stage1` (hardware) for coverage of every code path.
+
+## Provisioning auto-persist
+
+When `CONFIG_APP_PROVISION_BUILD=y` and `CONFIG_APP_PROVISION_AUTO_PERSIST=y`, `main.c` decodes the build-time `CONFIG_APP_CURVE25519_STATIC_*` strings immediately after `persist_state_init()` and calls `persist_state_curve25519_set_secret/peer()` to write them into NVS. This provides a UART-free provisioning path during factory builds. Production firmware should disable `CONFIG_APP_PROVISION_AUTO_PERSIST` so it never overwrites existing keys; it will continue to call `persist_state_curve25519_get_*()` and use whatever the provisioning image stored.

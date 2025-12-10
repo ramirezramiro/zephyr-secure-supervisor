@@ -2,10 +2,11 @@
 
 `src/uart_commands.c` hosts the optional UART CLI that field technicians can enable when they have spare SRAM. It translates simple text commands into watchdog override actions without rebooting or reflashing.
 
-## Commands
+-## Commands
 - `wdg?` – prints the current boot timeout, steady timeout, persistent override (if present), fallback ms, and recent reset counters.
 - `wdg <ms>` – stores a persistent override via `persist_state_write_watchdog_override` and notifies the supervisor to retune immediately.
 - `wdg clear` – clears any override and returns to the compiled watchdog windows.
+- `prov curve <scalar> [peer]` (provisioning builds only when `CONFIG_APP_ENABLE_UART_COMMANDS=y`) – clamps and persists the Curve25519 scalar, optionally updating the peer key. This is now optional because `CONFIG_APP_PROVISION_AUTO_PERSIST` can seed NVS automatically, but the CLI remains available for manual rework.
 
 ## Implementation Notes
 - Runs as a Zephyr thread with a modest stack (disabled by default to keep RAM free).
