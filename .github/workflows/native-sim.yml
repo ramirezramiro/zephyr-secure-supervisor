@@ -40,28 +40,10 @@ jobs:
           echo "ZEPHYR_BASE=${topdir}/zephyr" >> "$GITHUB_ENV"
           pip install --user -r "${topdir}/zephyr/scripts/requirements-base.txt"
 
-      - name: Build persist_state native_sim tests
+      - name: Run local CI helper (native + release + provision builds)
         run: |
           source ${ZEPHYR_BASE}/zephyr-env.sh
-          west build -b native_sim -p always tests/persist_state --build-dir build/tests/persist_state
-        shell: bash
-
-      - name: Run persist_state native_sim tests
-        run: |
-          source ${ZEPHYR_BASE}/zephyr-env.sh
-          west build -t run --build-dir build/tests/persist_state
-        shell: bash
-
-      - name: Build supervisor native_sim tests
-        run: |
-          source ${ZEPHYR_BASE}/zephyr-env.sh
-          west build -b native_sim -p always tests/supervisor --build-dir build/tests/supervisor
-        shell: bash
-
-      - name: Run supervisor native_sim tests
-        run: |
-          source ${ZEPHYR_BASE}/zephyr-env.sh
-          west build -t run --build-dir build/tests/supervisor
+          ./scripts/test_all_configs.sh
         shell: bash
 
       - name: Build MISRA hardware suite (compile check)

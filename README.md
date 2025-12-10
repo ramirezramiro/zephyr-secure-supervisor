@@ -13,6 +13,92 @@ The STM32L053R8’s 8 KB SRAM budget is too tight for a true PQC primitive, so
 
 > **Provisioning warning:** The repo defaults to the RFC 7748 test scalars/public keys so host/hardware runs are reproducible. Production firmware **must** provision device-unique scalars and peer keys via a factory or field jig before shipment, and the default Kconfig strings should be treated as placeholders only. See the “Provisioning workflow” note in `docs/crypto_backends.md` and the roadmap in `SECURITY_BACKLOG.md`.
 
+### Provisioning-only build overlay
+
+Provisioning requires the UART CLI and a larger command stack, which do not fit alongside the normal sensor workload. Use the dedicated overlay to build a CLI-only (or auto-persist) image, push the scalar, and immediately return to the production configuration:
+
+1. **Build the provisioning image** (CLI enabled, slimmer stacks) in its own build directory so it doesn’t collide with the production image:
+   ```bash
+   cd ~/zephyrproject
+   source .venv/bin/activate
+   west build -b nucleo_l053r8 -p auto ../zephyr-apps/helium_tx \\
+     -d build/provision \\
+     -DOVERLAY_CONFIG=prj_provision.conf
+   ```
+2. **Flash & monitor UART** from the same build directory (`west flash -r openocd --build-dir build/provision`, `sudo screen /dev/ttyACM0 115200`). You should see `app: Provisioning build: watchdog/supervisor disabled`, `app: Skipping HTS221 sensor thread while provisioning build is enabled`, and `uart_cmd: EVT,UART_CMD,READY`. Provision secrets in one of two ways:
+
+   - **Auto-persist (default)** – `CONFIG_APP_PROVISION_AUTO_PERSIST=y` decodes the build-time `CONFIG_APP_CURVE25519_STATIC_*` strings and writes them into NVS immediately after `persist_state_init()`. Set those config values per device (manually or via `./tools/update_provision_overlay.py --overlay prj_provision.conf` which copies the latest entry from `~/.helium_provision/curve_keys.json`), flash the provisioning build, power-cycle once, and watch for `app: Provision auto-persist secret=ok peer=ok`.
+
+     **Per-device automation quick reference** (single terminal sequence):
+
+     ```bash
+     # 1. Generate/store a unique scalar + peer pair, pushing it over UART immediately
+     python3 tools/provision_curve.py --interactive --device /dev/ttyACM0 \
+       --no-read --no-wait-ready --send-delay 7
+
+     # 2. Copy the latest pair from ~/.helium_provision/curve_keys.json into the overlay
+     ./tools/update_provision_overlay.py --overlay prj_provision.conf
+
+     # 3. Build + flash the provisioning image with those values baked in
+     CCACHE_DISABLE=1 west build -b nucleo_l053r8 -p auto ../zephyr-apps/helium_tx \
+       -d build/provision -DOVERLAY_CONFIG=prj_provision.conf
+     west flash -r openocd --build-dir build/provision
+
+     # 4. Capture the confirmation log (any UART client is fine)
+     python3 -m serial.tools.miniterm /dev/ttyACM0 115200
+     ```
+
+     Expected UART excerpt after step 4:
+
+     ```
+     [00:00:01.467,000] <inf> persist_state: Curve25519 scalar updated via provisioning command
+     [00:00:01.476,000] <inf> persist_state: Curve25519 peer public key updated via provisioning command
+     [00:00:01.485,000] <inf> app: Provision auto-persist secret=ok peer=ok
+     ```
+
+     Quick decision chart (when to drop back into the provisioning overlay). For a deeper view of how the firmware seeds/clamps/stores scalars, see [docs/crypto_backends.md](docs/crypto_backends.md):
+
+     ```mermaid
+     flowchart TD
+         A[Need firmware update or new board] --> B{Does NVS already hold the right scalar/peer?}
+         B -- Yes --> C[Build/flash production image only]
+         B -- No --> D[python3 tools/provision_curve.py --interactive --device /dev/ttyACM0 --no-read --no-wait-ready --send-delay 7]
+         D --> E[./tools/update_provision_overlay.py --overlay prj_provision.conf]
+         E --> F[Provisioning build: CCACHE_DISABLE=1 west build ... -d build/provision -DOVERLAY_CONFIG=prj_provision.conf]
+         F --> G[west flash -r openocd --build-dir build/provision]
+         G --> H[UART log shows provision auto-persist secret=ok peer=ok]
+         H --> C
+     ```
+
+   - **UART CLI** – leave `CONFIG_APP_PROVISION_AUTO_PERSIST` off and send the `prov curve …` command manually or via the helper script:
+
+   ```bash
+   # Provide explicit material (recommended for scripted factory jigs)
+   python tools/provision_curve.py \
+     --scalar 00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF \
+     --peer   112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF0011
+
+   # Generate/store a unique pair interactively (values cached under ~/.helium_provision/curve_keys.json)
+   python tools/provision_curve.py --interactive --device /dev/ttyACM0 [--store-path <dir>]
+
+   # Reuse the most recently stored pair without retyping
+   python tools/provision_curve.py --reuse-stored --device /dev/ttyACM0
+
+   # Leave the board's UART log untouched and read it later
+   python tools/provision_curve.py --no-read --scalar … --peer …
+
+   # Quick UART sanity check only (reuses the RFC 7748 vectors)
+   python tools/provision_curve.py --demo --device /dev/ttyACM0
+   ```
+
+   Every production device **must** provision a unique scalar (and peer key if applicable). The helper now waits for the board to print `EVT,UART_CMD,READY` / `EVT,APP,READY` before it transmits `prov curve …`, so you can start the script, reset the board, watch the boot log scroll by, and only then will the scalar be sent. After transmission it watches the UART for `EVT,PROVISION,CURVE25519_UPDATED` and, if that acknowledgement never shows up, it offers to resend the same scalar once before warning you that the hardware never responded. Use `--no-wait-ready` if you prefer the old fixed `--send-delay` behavior. The `--demo` flag is only for validating the CLI wiring during bring-up; the script refuses to transmit the built-in RFC 7748 vectors unless `--demo` is specified.
+
+   (Install once with `pip install pyserial` inside `.venv`.)
+
+3. **Rebuild the production image** without the overlay: `west build -b nucleo_l053r8 -p auto ../zephyr-apps/helium_tx && west flash -r openocd`. Provisioning mode must never remain enabled on shipping firmware—its only purpose is to stage unique scalars during factory setup. Production builds do not overwrite NVS; they simply consume whatever scalar/peer pair the provisioning build installed.
+
+`prj_provision.conf` sets `CONFIG_APP_PROVISION_BUILD=y`, forces the CLI on, and trims other stacks so the enlarged UART thread fits inside 8 KB SRAM. Inspect the file if you need to tune the provisioning workflow for another board.
+
 ## Quick Start
 
 1. `west build -b nucleo_l053r8 -p auto .`
@@ -77,6 +163,8 @@ FLASH: 49744 B / 64 KB = 75.90%
 
 That leaves roughly 600 B of headroom for logs/buffers. [Read more](docs/memory_budget.md) (`docs/memory_budget.md`) for tuning tips before re-enabling optional services.
 
+> **Headroom warning:** Both the production image (~92–93 % RAM) and the provisioning overlay (~96 % RAM) are already operating at the edge of what the STM32L053R8 can handle. Any meaningful security hardening (secure storage, tamper logging, rotation logic) will either need to trade off existing functionality or move to a higher-spec MCU. Treat this branch as a reference design for constrained boards rather than a platform for piling on new features.
+
 ### Deployment Guidance
 
 - Curve25519-backed build = minimum-viable demo (per-device scalars, session salts, MAC tags) but no spare SRAM or secure storage.
@@ -120,9 +208,21 @@ The sensor worker emits ten plaintext samples on boot before enabling AES-CTR (`
 | `CONFIG_APP_CURVE25519_STATIC_PEER_PUB_HEX` | RFC 7748 vector | Peer public key used to derive the shared secret/AES key. |
 | `CONFIG_APP_RESET_WATCHDOG_THRESHOLD` | 3 | Number of consecutive watchdog resets before safe mode engages. |
 | `CONFIG_APP_UART_COMMANDS_ENABLE` | `n` | Optional UART CLI; keep disabled unless you have SRAM headroom. |
+| `CONFIG_APP_PROVISION_BUILD` | `n` | Marks a provisioning-only image (skips HTS221, enlarges the CLI stack). Enabled through `prj_provision.conf` during factory key injection only. |
 | `CONFIG_APP_SENSOR_THREAD_STACK_SIZE` | 768 | Sensor work stack size tuned for 8 KB SRAM; increase only if you add heavier telemetry code. |
 
 All options live in `prj.conf` (or overlay configs) and can be overridden at build time via `west build -D` or `menuconfig`.
+
+### Local CI helper
+
+Run every native_sim test plus both hardware builds with a single command (from your west workspace root):
+
+```bash
+cd ~/zephyrproject
+../zephyr-apps/helium_tx/scripts/test_all_configs.sh
+```
+
+This mirrors the expected CI coverage: native regression tests and builds for both the production image and the provisioning overlay.
 
 ## Use Cases & Domains
 
@@ -152,6 +252,18 @@ All options live in `prj.conf` (or overlay configs) and can be overridden at bui
 - `docs/testing.md` + `tests/README.md` – Native + hardware test recipes.
 - `docs/supervisor.md` / `docs/recovery.md` / `docs/watchdog_ctrl.md` – State machines and watchdog plumbing.
 - `docs/persist_state.md` / `docs/app_crypto.md` / `docs/log_utils.md` – Persistence schema, CTR helper, logging macros.
+
+## Future Work
+
+We still have open security hardening tasks tracked in [SECURITY_BACKLOG.md](SECURITY_BACKLOG.md):
+
+1. **Secure storage** – Move scalars/peers out of plain NVS (OTP, secure element, or encrypted blobs) once hardware allows it.
+2. **Tamper logging** – Persist and surface events when provisioning occurs or NVS integrity checks fail, so field logs show potential attacks.
+3. **Key rotation triggers** – Define APIs + provisioning flow to rotate scalars on demand and keep receivers in sync.
+4. **Audit trail automation** – Hook provisioning scripts into manufacturing records so each scalar/peer pair ties back to a device ID.
+
+Address these before claiming full production readiness; the current implementation focuses on reproducible provisioning for lab hardware.
+Given the provisioning build already consumes ~96 % of the STM32L053R8’s 8 KB SRAM, most of these items should target the production firmware (or a higher-spec MCU) rather than bolting new logic onto the provisioning overlay. Keep that build as lean as possible and design long-term hardening for boards with more headroom.
 - `docs/release.md` – Pre-release checklist (tests, artifacts, cleanup).
 - `SECURITY_BACKLOG.md` – Roadmap for provisioning, tamper logging, and key rotation improvements.
 

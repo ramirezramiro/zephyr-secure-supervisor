@@ -40,26 +40,69 @@ Both backends are mutually exclusive to keep the 8 KB SRAM footprint in check.
 ### Provisioning Workflow
 
 - The sample `prj.conf` strings use the RFC 7748 test vectors so host and hardware runs match documentation; they are **not** secure. Replace them with per-device scalars before shipping hardware.
-- Provisioning flow of record:
-  1. During factory test, run a jig/CLI that generates a Curve25519 scalar (or ingests one from a secure element).
-  2. Clamp and write the scalar into the board via the UART provisioning command or a custom host script that uses `persist_state_curve25519_*` helpers.
-  3. Store the matching peer public key in your server/backend and configure the device with the correct `CONFIG_APP_CURVE25519_STATIC_PEER_PUB_HEX` (or write it through the same jig).
-  4. Record the session counter baseline so later boots can be replay-protected.
-- Until that jig exists, treat the Kconfig strings as placeholders; shipping with the defaults makes decryption trivial. See `SECURITY_BACKLOG.md` for the roadmap on the provisioning toolchain.
+- Provisioning flows:
+  - **Auto persist (default in `prj_provision.conf`)**
+    1. Edit `CONFIG_APP_CURVE25519_STATIC_SECRET_HEX` / `_PEER_PUB_HEX` before building the provisioning image, or run `./tools/update_provision_overlay.py --overlay prj_provision.conf` to copy the latest entry from `~/.helium_provision/curve_keys.json`.
+    2. Flash `prj_provision.conf` and power-cycle once. The log shows `app: Provision auto-persist secret=ok peer=ok` when NVS is written.
+    3. Flash the production build. It reads the values from NVS and never overwrites them.
+  - **UART CLI (when `CONFIG_APP_PROVISION_AUTO_PERSIST` is disabled)**
+    1. During factory test, run a jig/CLI that generates a Curve25519 scalar (or ingests one from a secure element).
+    2. Clamp and write the scalar into the board via `prov curve …` or a custom host script that uses `persist_state_curve25519_*`.
+    3. Store the matching peer public key in your server/backend and configure the device with the correct `CONFIG_APP_CURVE25519_STATIC_PEER_PUB_HEX` (or write it through the same jig).
+    4. Record the session counter baseline so later boots can be replay-protected.
+- Until the tooling is hardened, treat the Kconfig strings as placeholders; shipping with the defaults makes decryption trivial. See `SECURITY_BACKLOG.md` for the roadmap on the provisioning toolchain.
+
+  The flow below captures when to run the provisioning overlay versus when you can stay on the production image:
+
+  ```mermaid
+  flowchart TD
+      A[Start / new board] --> B{Need fresh scalar or peer key?}
+      B -- Yes --> C[python3 tools/provision_curve.py --interactive --device /dev/ttyACM0 --no-read --no-wait-ready --send-delay 7]
+      C --> D[./tools/update_provision_overlay.py --overlay prj_provision.conf]
+      D --> E[CCACHE_DISABLE=1 west build -b nucleo_l053r8 -p auto ../zephyr-apps/helium_tx \
+          -d build/provision -DOVERLAY_CONFIG=prj_provision.conf]
+      E --> F[west flash -r openocd --build-dir build/provision]
+      F --> G[UART log shows provision auto-persist secret=ok peer=ok]
+      G --> H[Rebuild & flash production firmware 'no overlay']
+      B -- No --> I{Does NVS already contain the correct pair?}
+      I -- Yes --> H
+      I -- No --> C
+  ```
+
+  Staying on the production image is valid only when NVS already contains the right secrets. As soon as a board needs a new scalar/peer, drop back into the provisioning path, confirm the UART auto-persist log, and then immediately return to the regular firmware.
 
 #### Built-in provisioning command
 
-- Temporarily enable the UART CLI (`CONFIG_APP_ENABLE_UART_COMMANDS=y`), rebuild, and flash the board.
-- Connect to `/dev/ttyACM0 @ 115200` and run:
-  ```
-  prov curve <64-hex-byte-scalar> [<64-hex-byte-peer>]
-  ```
-  The scalar is clamped and written to NVS; the optional peer key is stored alongside it. Reboot to load the new material.
-- Example host command:
-  ```bash
-  echo "prov curve AABBCCDDEEFF...0011 11223344...EEFF" | sudo tee /dev/ttyACM0 > /dev/null
-  ```
-- Disable the UART CLI afterwards (`CONFIG_APP_ENABLE_UART_COMMANDS=n`) to reclaim SRAM for production firmware.
+1. Build the provisioning-only image with the supplied overlay (enables `CONFIG_APP_PROVISION_BUILD`, turns on the CLI, and trims other stacks so the UART thread fits in 8 KB). Use a dedicated build directory (e.g. `build/provision`) so you can switch back to the production build without cleaning:
+   ```bash
+   cd ~/zephyrproject
+   source .venv/bin/activate
+   west build -b nucleo_l053r8 -p auto ../zephyr-apps/helium_tx \\
+     -d build/provision \\
+     -DOVERLAY_CONFIG=prj_provision.conf
+   west flash -r openocd --build-dir build/provision
+   ```
+   UART logs now show `app: Provisioning build: watchdog/supervisor disabled`, `app: Skipping HTS221 sensor thread while provisioning build is enabled`, and `uart_cmd: EVT,UART_CMD,READY`.
+2. Connect to `/dev/ttyACM0 @ 115200` and issue:
+   ```
+   prov curve <64-hex-byte-scalar> [<64-hex-byte-peer>]
+   ```
+   The scalar is clamped and written to NVS; the optional peer key is stored alongside it. Reboot to load the new material. You can type the command manually inside `screen` or run the helper script:
+   ```bash
+   # Explicit material (factory jig automation)
+   python tools/provision_curve.py --device /dev/ttyACM0 --scalar … [--peer …]
+
+   # One-off provisioning with automatic scalar/peer generation and caching
+   python tools/provision_curve.py --interactive --device /dev/ttyACM0 [--store-path <dir>]
+
+   # Reuse the last generated pair
+   python tools/provision_curve.py --reuse-stored --device /dev/ttyACM0
+
+   # UART-only sanity check (built-in RFC 7748 vectors; never ship with these)
+   python tools/provision_curve.py --demo --device /dev/ttyACM0
+   ```
+   Add `--no-read` to leave the UART log untouched and view it later inside `screen`. Use `--store-path` to pin the cache somewhere else; by default the helper writes `~/.helium_provision/curve_keys.json` with a timestamped history so you can audit which scalar was issued to which board. The helper waits for `EVT,UART_CMD,READY`/`EVT,APP,READY` before it transmits, so run it, tap NRST, watch the boot log scroll, and let it send the scalar automatically when the CLI is up. Afterward it scans for `EVT,PROVISION,CURVE25519_UPDATED` and will offer to resend the same scalar once if the acknowledgement is missing; repeated failures trigger a warning so you can check cables/provisioning mode. Provide `--no-wait-ready` if you prefer the old fixed delay flow. It also refuses to transmit the RFC 7748 defaults unless `--demo` is provided, making it harder to accidentally leave production boards with the placeholder keys.
+3. Rebuild the production firmware **without** the overlay (`west build -b nucleo_l053r8 -p auto ../zephyr-apps/helium_tx --build-dir build/release && west flash -r openocd --build-dir build/release`). Provisioning mode must never ship—it exists purely for factory/field key injection.
 
 ### UART Cues
 

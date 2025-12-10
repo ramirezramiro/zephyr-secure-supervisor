@@ -1,0 +1,19 @@
+*** Booting Zephyr OS build v4.2.0-6484-g196a1da504bd ***
+[00:00:00.010,000] <inf> app: EVT,APP,START
+[00:00:00.017,000] <inf> fs_nvs: 32 Sectors of 128 bytes
+[00:00:00.023,000] <inf> fs_nvs: alloc wra: 30, 60
+[00:00:00.028,000] <inf> fs_nvs: data wra: 30, 20
+[00:00:00.057,000] <inf> persist_state: Persistent state loaded: consecutive=0 total=0 override=0
+[00:00:00.068,000] <inf> app_crypto: Curve25519 peer public key loaded from provisioning storage
+[00:00:00.766,000] <inf> app_crypto: EVT,PQC,SESSION,counter=1,salt=0x47CB2DF5
+[00:00:01.438,000] <inf> app_crypto: Curve25519 key ready (local_pub=053B912D..., peer fixed)
+[00:00:01.447,000] <inf> app_crypto: Curve25519 backend active (shared secret drives AES keys)
+[00:00:01.457,000] <inf> app_crypto: AES helper initialized (key_len=32, backend=curve25519)
+[00:00:01.467,000] <inf> persist_state: Curve25519 scalar updated via provisioning command
+[00:00:01.476,000] <inf> persist_state: Curve25519 peer public key updated via provisioning command
+[00:00:01.485,000] <inf> app: Provision auto-persist secret=ok peer=ok
+[00:00:01.546,000] <inf> app: Provisioning build: watchdog/supervisor disabled
+[00:00:01.554,000] <inf> app: Skipping HTS221 sensor thread while provisioning build is enabled
+[00:00:01.563,000] <inf> uart_cmd: uart_cmd thread starting (safe_mode=no)
+[00:00:01.570,000] <inf> uart_cmd: EVT,UART_CMD,READY,fallback=no
+[00:00:01.690,000] <inf> app: EVT,APP,READY

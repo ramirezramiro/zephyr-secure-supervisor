@@ -20,6 +20,12 @@ This snapshot captures the Curve25519-backed AES helper running on the 8 KB SR
 - AES helper retained to encrypt telemetry with the derived session key (`CONFIG_APP_USE_AES_ENCRYPTION=y`).
 - Stack sizes tuned per the SRAM budget table in `README.md`.
 
+### Provisioning Workflow Updates
+
+- Added `tools/provision_curve.py` for generating/transmitting per-device scalars + peer keys, and `tools/update_provision_overlay.py` for copying the latest pair into `prj_provision.conf`.
+- Provisioning builds now auto-persist those values to NVS on first boot (`app: Provision auto-persist secret=ok peer=ok`). See the sample UART capture in `docs/release_logs/v1.0/provision_auto_persist_uart.txt`.
+- README.md includes quick decision charts plus the full command sequence; release artifacts now link directly to the UART log for easier auditing.
+
 ### Logs & Tests
 
 - Native simulation + hardware MISRA suites run with the Curve overlay (command recipes in `docs/testing.md` / `tests/README.md`).
@@ -68,6 +74,7 @@ This snapshot captures the Curve25519-backed AES helper running on the 8 KB SR
   PROJECT EXECUTION SUCCESSFUL
   ```
 - Application UART log (Curve backend enabling telemetry) to be appended when captured.
+- Provisioning auto-persist UART log: `docs/release_logs/v1.0/provision_auto_persist_uart.txt` (attached to the GitHub release for download).
 
 ### Known Constraints
 

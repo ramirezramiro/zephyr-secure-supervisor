@@ -4,11 +4,8 @@ This file captures the remaining security hardening tasks for zephyr-secure-supe
 
 ## Provisioning & Key Management
 
-- **Device-unique scalars/public keys** – Replace the RFC 7748 test vectors in `prj.conf` with per-device secrets. Implement a host CLI or factory jig that:
-  - Generates/clamps a scalar.
-  - Writes it to the board via a Zephyr shell command or bespoke provisioning binary that calls `persist_state_curve25519_get_secret()` with a “write” path.
-  - Stores the server-side peer key + session counter baseline for decryption.
-- **Audit trail** – Record which scalar was burned into each serial number / hardware ID, and capture the initial session counter so replay protection can be enforced.
+- **Device-unique scalars/public keys** – ✅ Automated via `tools/provision_curve.py` + `tools/update_provision_overlay.py` (see README). Future work: hook the scripts into factory infrastructure and ensure the generated values are copied to release artifacts.
+- **Audit trail (TODO)** – Record which scalar was burned into each serial number / hardware ID, and capture the initial session counter so replay protection can be enforced.
 
 ## Tamper Logging & Secure Storage
 
@@ -25,3 +22,14 @@ This file captures the remaining security hardening tasks for zephyr-secure-supe
 
 - Keep `README.md`, `docs/crypto_backends.md`, and `docs/deployment.md` in sync with the requirements above.
 - When the provisioning jig/CLI exists, document its usage under `docs/provisioning.md` (placeholder) and link from the README.
+
+## Future Work Snapshot
+
+*Note:* The provisioning overlay already consumes ~96 % of the STM32L053R8’s 8 KB SRAM, so the items below should primarily target the production firmware (or larger MCUs) rather than trying to shoehorn more logic into the provisioning build.
+
+1. **Secure storage** – Design how scalars/peers move from plain NVS to OTP/secure elements/encrypted blobs. Capture hardware requirements and migration steps.
+2. **Tamper logging** – Persist events when NVS integrity checks fail or provisioning occurs unexpectedly. Expose the log via UART so field teams can detect tampering.
+3. **Key rotation triggers** – Define the APIs and provisioning flow for rotating scalars on demand (factory reset, remote command, counter threshold). Ensure receivers can derive new shared secrets safely.
+4. **Audit trail automation** – Tie the existing provisioning scripts into manufacturing records so each scalar/peer pair is traceable to a device ID.
+
+Track progress on these items before declaring the security story complete.
