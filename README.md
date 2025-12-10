@@ -13,6 +13,26 @@ The STM32L053R8’s 8 KB SRAM budget is too tight for a true PQC primitive, so
 
 > **Provisioning warning:** The repo defaults to the RFC 7748 test scalars/public keys so host/hardware runs are reproducible. Production firmware **must** provision device-unique scalars and peer keys via a factory or field jig before shipment, and the default Kconfig strings should be treated as placeholders only. See the “Provisioning workflow” note in `docs/crypto_backends.md` and the roadmap in `SECURITY_BACKLOG.md`.
 
+## Quick Start
+
+1. `west build -b nucleo_l053r8 -p auto .`
+2. `west flash -r openocd`
+3. `sudo screen /dev/ttyACM0 115200`
+
+Need MISRA hardware tests? Run the MISRA commands in the Testing Strategy section.
+
+> Provisioning device-unique scalars? See [Provisioning workflow](#provisioning-workflow-factory-overlay) for the dedicated overlay and automation scripts.
+
+### Build & Flash Cheatsheet
+
+| Task | Command(s) | Result |
+|------|------------|--------|
+| Build + flash application | `west build -b nucleo_l053r8 -p auto . && west flash -r openocd` | Deploys the watchdog/sensor firmware to the board. |
+| Monitor UART logs | `sudo screen /dev/ttyACM0 115200` | Shows EVT telemetry + AES transition. |
+| Run MISRA hardware ztests | `cd <workspace>; west build -p always <repo>/tests/unit/misra_stage1 -b nucleo_l053r8 --build-dir build/tests/unit/misra_stage1; west flash -r openocd --build-dir build/tests/unit/misra_stage1; sudo screen /dev/ttyACM0 115200` | Executes `tests/unit/misra_stage1` on hardware. |
+| Run native persistence test | `west build -b native_sim tests/persist_state -p auto --build-dir build/tests/persist_state && west build -t run --build-dir build/tests/persist_state` | Validates NVS + safe-memory helpers on host. |
+| Run native supervisor test | `west build -b native_sim tests/supervisor -p auto --build-dir build/tests/supervisor && west build -t run --build-dir build/tests/supervisor` | Exercises heartbeat/recovery escalation logic. |
+
 ### Provisioning-only build overlay
 
 Provisioning requires the UART CLI and a larger command stack, which do not fit alongside the normal sensor workload. Use the dedicated overlay to build a CLI-only (or auto-persist) image, push the scalar, and immediately return to the production configuration:
@@ -98,24 +118,6 @@ Provisioning requires the UART CLI and a larger command stack, which do not fit 
 3. **Rebuild the production image** without the overlay: `west build -b nucleo_l053r8 -p auto ../zephyr-apps/helium_tx && west flash -r openocd`. Provisioning mode must never remain enabled on shipping firmware—its only purpose is to stage unique scalars during factory setup. Production builds do not overwrite NVS; they simply consume whatever scalar/peer pair the provisioning build installed.
 
 `prj_provision.conf` sets `CONFIG_APP_PROVISION_BUILD=y`, forces the CLI on, and trims other stacks so the enlarged UART thread fits inside 8 KB SRAM. Inspect the file if you need to tune the provisioning workflow for another board.
-
-## Quick Start
-
-1. `west build -b nucleo_l053r8 -p auto .`
-2. `west flash -r openocd`
-3. `sudo screen /dev/ttyACM0 115200`
-
-Need MISRA hardware tests? Run the MISRA commands in the Testing Strategy section.
-
-### Build & Flash Cheatsheet
-
-| Task | Command(s) | Result |
-|------|------------|--------|
-| Build + flash application | `west build -b nucleo_l053r8 -p auto . && west flash -r openocd` | Deploys the watchdog/sensor firmware to the board. |
-| Monitor UART logs | `sudo screen /dev/ttyACM0 115200` | Shows EVT telemetry + AES transition. |
-| Run MISRA hardware ztests | `cd <workspace>; west build -p always <repo>/tests/unit/misra_stage1 -b nucleo_l053r8 --build-dir build/tests/unit/misra_stage1; west flash -r openocd --build-dir build/tests/unit/misra_stage1; sudo screen /dev/ttyACM0 115200` | Executes `tests/unit/misra_stage1` on hardware. |
-| Run native persistence test | `west build -b native_sim tests/persist_state -p auto --build-dir build/tests/persist_state && west build -t run --build-dir build/tests/persist_state` | Validates NVS + safe-memory helpers on host. |
-| Run native supervisor test | `west build -b native_sim tests/supervisor -p auto --build-dir build/tests/supervisor && west build -t run --build-dir build/tests/supervisor` | Exercises heartbeat/recovery escalation logic. |
 
 ## Testing Strategy
 
