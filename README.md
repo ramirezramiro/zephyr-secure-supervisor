@@ -13,6 +13,14 @@ The STM32L053R8’s 8 KB SRAM budget is too tight for a true PQC primitive, so
 
 > **Provisioning warning:** The repo defaults to the RFC 7748 test scalars/public keys so host/hardware runs are reproducible. Production firmware **must** provision device-unique scalars and peer keys via a factory or field jig before shipment, and the default Kconfig strings should be treated as placeholders only. See the “Provisioning workflow” note in `docs/crypto_backends.md` and the roadmap in `SECURITY_BACKLOG.md`.
 
+## Key Features
+
+- **Dual-heartbeat watchdog supervision** – LED + system heartbeats gate every feed so the STM32 IWDG never pets blindly.
+- **Encrypted persistence & telemetry** – Curve25519-backed AES helper derives per-boot AES/MAC keys, encrypting reset counters, watchdog overrides, and HTS221 samples (or your sensor of choice).
+- **Factory provisioning overlay** – `tools/provision_curve.py` and `tools/update_provision_overlay.py` generate/ingest per-device scalars and auto-persist them to NVS in a dedicated build configuration.
+- **Release-grade documentation** – README flowcharts, per-component docs, release logs, and `SECURITY_BACKLOG.md` describe current status plus future hardening.
+- **Automated tests & CI** – `scripts/test_all_configs.sh` runs native_sim suites plus both hardware builds locally and in GitHub Actions.
+
 ## Quick Start
 
 1. `west build -b nucleo_l053r8 -p auto .`
@@ -230,17 +238,17 @@ This mirrors the expected CI coverage: native regression tests and builds for bo
 
 | Domain / product slice | Representative deployment | Relevant features & quick start |
 |------------------------|---------------------------|--------------------------------|
-| Industrial telemetry node | Remote environmental monitor logging temperature/humidity and reporting health over UART/Lora. | Start from `sensor_hts221.c`, tune `CONFIG_APP_SENSOR_SAMPLE_INTERVAL_MS`, keep AES enabled for logs. |
-| Gateway / edge supervisor | Edge box watching PLCs/radios for stalled heartbeats. | Use `supervisor_notify_*` hooks and persistent watchdog overrides; enable UART CLI if SRAM allows. |
+| Industrial telemetry node | Remote environmental monitor logging temperature/humidity and reporting health over UART/Lora. | Start from `sensor_hts221.c`, tune `CONFIG_APP_SENSOR_SAMPLE_INTERVAL_MS`, keep AES enabled for logs, and use the provisioning overlay to inject per-device scalars. |
+| Gateway / edge supervisor | Edge box watching PLCs/radios for stalled heartbeats. | Use `supervisor_notify_*` hooks and persistent watchdog overrides; enable UART CLI if SRAM allows, or provision overrides via the host tooling. |
 | Safety/compliance prototype | MISRA-driven demo where auditors expect guarded memory ops and hardware regression tests. | Combine `safe_memory.h`, `docs/MISRA_DEVIATIONS.md`, and `tests/unit/misra_stage1`; capture UART logs for auditors. |
-| Field-serviceable watchdog controller | Utility meter or base station technicians tune on-site. | Expose `wdg?`, `wdg <ms>`, `wdg clear`; persistence keeps overrides across boots. |
-| PQC sandbox | Lab platform experimenting with post-quantum ciphers on constrained boards. | Swap crypto backends via `docs/crypto_backends.md`; supervisor/persistence stay untouched. |
+| Field-serviceable watchdog controller | Utility meter or base station technicians tune on-site. | Expose `wdg?`, `wdg <ms>`, `wdg clear`; persistence keeps overrides across boots. Provision new scalars on the bench via the CLI or auto-persist overlay before fielding devices. |
+| PQC sandbox | Lab platform experimenting with post-quantum ciphers on constrained boards. | Swap crypto backends via `docs/crypto_backends.md`; provisioning scripts make it easy to issue fresh Curve25519 material per experiment. |
 
 ### UAV / Aerospace / Defense Notes
 
 - **Dual-heartbeat gating** – Feed the IWDG only when both mission loop and LED GPIO heartbeats arrive.
 - **Safe-mode escalation** – Persistent reset counters widen watchdog windows and trigger autonomous reboots when thresholds hit.
-- **Structured telemetry** – AES-CTR remains the recommended path for flight hardware on this 8 KB MCU; the Curve25519-backed AES helper provides per-device scalars + MAC tags for lab demos, but Mission/airworthiness builds should either stay on AES (static key inside a trusted enclosure) or migrate to a higher-spec board with true PQC capacity.
+- **Structured telemetry** – AES-CTR remains the recommended path for flight hardware on this 8 KB MCU; the Curve25519-backed AES helper provides per-device scalars + MAC tags for lab demos, but Mission/airworthiness builds should either stay on AES (static key inside a trusted enclosure) or migrate to a higher-spec board with true PQC capacity. Factory provisioning can auto-persist scalars, but production flight builds must disable the overlay so they never overwrite NVS in the field.
 - **MISRA-inspired guards** – `safe_memory.h` and the MISRA ztests provide the guardrails certification teams expect (see disclaimer above).
 - **Tunable watchdog windows** – `watchdog_ctrl.c` plus persistent overrides let field engineers retune watchdogs without new firmware.
 
