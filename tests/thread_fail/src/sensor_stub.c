@@ -1,4 +1,6 @@
 #include <inttypes.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
@@ -21,6 +23,33 @@ static uint32_t stub_interval_ms;
 static uint32_t stub_counter;
 static bool stub_running;
 static bool stub_hung;
+static bool stub_led_ready;
+
+#define LED0_NODE DT_ALIAS(led0)
+#if !DT_NODE_HAS_STATUS(LED0_NODE, okay)
+#error "Unsupported board: led0 devicetree alias is not defined"
+#endif
+static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+
+static void blink_sensor_led(void)
+{
+    if (!stub_led_ready) {
+        return;
+    }
+
+    for (int i = 0; i < 2; i++) {
+        if (gpio_pin_set_dt(&led, 1) != 0) {
+            stub_led_ready = false;
+            return;
+        }
+        k_msleep(40);
+        if (gpio_pin_set_dt(&led, 0) != 0) {
+            stub_led_ready = false;
+            return;
+        }
+        k_msleep(40);
+    }
+}
 
 static void emit_sample(bool encrypted)
 {
@@ -70,8 +99,9 @@ static void stub_work_handler(struct k_work *work)
 		LOG_INF("Test stub: switching to encrypted telemetry");
 	}
 
-	emit_sample(emit_encrypted);
-	stub_counter++;
+    emit_sample(emit_encrypted);
+    blink_sensor_led();
+    stub_counter++;
 
 	if (stub_counter >= ENCRYPTED_SAMPLE_TARGET) {
 		LOG_WRN("Test stub reached %u samples; simulating hang", stub_counter);
@@ -90,20 +120,28 @@ int sensor_hts221_start(bool safe_mode_active)
 {
 	ARG_UNUSED(safe_mode_active);
 
-	if (stub_running) {
-		return 0;
-	}
+    if (stub_running) {
+        return 0;
+    }
 
-	stub_interval_ms = CONFIG_APP_SENSOR_SAMPLE_INTERVAL_MS;
-	if (stub_interval_ms == 0U) {
-		stub_interval_ms = 1000U;
-	}
+    stub_interval_ms = CONFIG_APP_SENSOR_SAMPLE_INTERVAL_MS;
+    if (stub_interval_ms == 0U) {
+        stub_interval_ms = 1000U;
+    }
 
-	LOG_INF("HTS221 stub active (interval=%ums)", stub_interval_ms);
-	stub_counter = 0U;
-	stub_running = true;
-	stub_hung = false;
-	k_work_init_delayable(&stub_work, stub_work_handler);
-	k_work_schedule(&stub_work, K_NO_WAIT);
-	return 0;
+    int led_rc = gpio_pin_configure_dt(&led, GPIO_OUTPUT_INACTIVE);
+    if (led_rc == 0) {
+        stub_led_ready = true;
+    } else {
+        stub_led_ready = false;
+        LOG_WRN("LED config failed: %d", led_rc);
+    }
+
+    LOG_INF("HTS221 stub active (interval=%ums)", stub_interval_ms);
+    stub_counter = 0U;
+    stub_running = true;
+    stub_hung = false;
+    k_work_init_delayable(&stub_work, stub_work_handler);
+    k_work_schedule(&stub_work, K_NO_WAIT);
+    return 0;
 }
