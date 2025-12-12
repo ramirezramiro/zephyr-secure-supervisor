@@ -78,4 +78,14 @@ sudo screen /dev/ttyACM0 115200
 ```
 Run this after code changes to confirm HTS221 telemetry, AES logs, and watchdog feeding with real sensors.
 
+**Thread-fail demo:** (reuses the production stacks + Curve25519-backed AES path)
+```
+cd ~/zephyrproject
+source .venv/bin/activate
+CCACHE_DISABLE=1 west build -b nucleo_l053r8 ../zephyr-apps/helium_tx/tests/thread_fail -d build/thread_fail
+west flash -r openocd --build-dir build/thread_fail
+python3 -m serial.tools.miniterm /dev/ttyACM0 115200
+```
+Expect five plaintext and five encrypted HTS221 samples, followed by `Test stub reached 10 samples; simulating hang`, degraded-health logs from the supervisor, and a watchdog reset.
+
 For deeper explanations, troubleshooting tips, and regression checklists, open `docs/testing.md`.

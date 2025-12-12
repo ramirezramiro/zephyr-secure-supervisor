@@ -26,6 +26,22 @@ This snapshot captures the Curve25519-backed AES helper running on the 8 KB SR
 - Provisioning builds now auto-persist those values to NVS on first boot (`app: Provision auto-persist secret=ok peer=ok`). See the sample UART capture in `docs/release_logs/v1.0/provision_auto_persist_uart.txt`.
 - README.md includes quick decision charts plus the full command sequence; release artifacts now link directly to the UART log for easier auditing.
 
+### Thread-fail Demonstration Overlay
+
+- New overlay under `tests/thread_fail/` mirrors the production Curve25519 + AES setup but forces the HTS221 sensor stub to freeze after ten samples (five plaintext + five encrypted). The watchdog path, supervisor stacks, and crypto footprint remain unchanged, making it ideal for demos.
+- Commands: `CCACHE_DISABLE=1 west build -b nucleo_l053r8 ../zephyr-apps/helium_tx/tests/thread_fail -d build/thread_fail`, `west flash -r openocd --build-dir build/thread_fail`, then `python3 -m serial.tools.miniterm /dev/ttyACM0 115200`.
+- UART excerpt (full log in `docs/release_logs/v1.0/thread_fail_uart.txt`):
+  ```
+  [00:00:11.623,000] <inf> sensor_stub: Test stub: switching to encrypted telemetry
+  [00:00:19.700,000] <wrn> sensor_stub: Test stub reached 10 samples; simulating hang
+  [00:00:24.709,000] <wrn> supervisor: EVT,HEALTH,DEGRADED,fail=1,led=stale,led_age_ms=7023,hb=stale,hb_age_ms=7023
+  [00:00:26.742,000] <err> supervisor: EVT,HEALTH,RECOVERY_REQUEST
+  ... watchdog reset ...
+  [00:00:01.605,000] <wrn> app: Reset cause: WATCHDOG
+  ```
+
+Build footprint (Curve + AES, no provisioning): `FLASH 49 036 B (74.82%)`, `RAM 7 400 B (90.33%)`.
+
 ### Logs & Tests
 
 - Native simulation + hardware MISRA suites run with the Curve overlay (command recipes in `docs/testing.md` / `tests/README.md`).

@@ -93,6 +93,27 @@ west flash -r openocd
 sudo screen /dev/ttyACM0 115200
 ```
 
+## Thread-fail demo (nucleo_l053r8)
+
+When you need to demo watchdog recovery caused by a wedged sensor thread (without forking production code), build the overlay in `tests/thread_fail/`. It shares the Curve25519-backed AES path and stack sizes with the shipping image; the only change is that the HTS221 stub stops posting work after ten samples.
+
+```
+cd ~/zephyrproject
+source .venv/bin/activate
+CCACHE_DISABLE=1 west build -b nucleo_l053r8 ../zephyr-apps/helium_tx/tests/thread_fail -d build/thread_fail
+west flash -r openocd --build-dir build/thread_fail
+python3 -m serial.tools.miniterm /dev/ttyACM0 115200
+```
+
+Expected UART cues:
+
+- Five plaintext HTS221 samples followed by `Test stub: switching to encrypted telemetry`.
+- Five AES-tagged samples (`enc=1` logs) then `Test stub reached 10 samples; simulating hang`.
+- Supervisor logs degraded health (`EVT,HEALTH,DEGRADED`) and requests recovery; the watchdog reboots the MCU.
+- Next boot shows `Reset cause: WATCHDOG` and the history counter increments.
+
+Build footprint for reference: `FLASH 49 036 B (74.82%)`, `RAM 7 400 B (90.33%)`.
+
 ## Regression Checklist
 - Run `tests/persist_state` after touching persistence or safe-memory helpers.
 - Run `tests/supervisor` for changes to `supervisor.c`, `watchdog_ctrl.c`, or recovery signaling.

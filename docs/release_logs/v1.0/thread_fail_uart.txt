@@ -1,0 +1,47 @@
+*** Booting Zephyr OS build v4.2.0-6484-g196a1da504bd ***
+[00:00:00.010,000] <inf> app: EVT,APP,START
+[00:00:00.017,000] <inf> fs_nvs: 32 Sectors of 128 bytes
+[00:00:00.022,000] <inf> fs_nvs: alloc wra: 20, 58
+[00:00:00.027,000] <inf> fs_nvs: data wra: 20, 40
+[00:00:00.075,000] <inf> persist_state: Persistent state loaded: consecutive=0 total=0 override=0
+[00:00:00.093,000] <inf> app_crypto: Curve25519 peer public key loaded from provisioning storage
+[00:00:00.799,000] <inf> app_crypto: EVT,PQC,SESSION,counter=1,salt=0x47CB2DF5
+[00:00:01.479,000] <inf> app_crypto: Curve25519 key ready (local_pub=053B912D..., peer fixed)
+[00:00:01.488,000] <inf> app_crypto: Curve25519 backend active (shared secret drives AES keys)
+[00:00:01.498,000] <inf> app_crypto: AES helper initialized (key_len=32, backend=curve25519)
+[00:00:01.559,000] <inf> app: EVT,WATCHDOG,CONFIGURED,boot_ms=8000,steady_ms=2000,retune_delay_ms=500
+[00:00:01.569,000] <inf> sensor_stub: HTS221 stub active (interval=2000ms)
+[00:00:01.577,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25000,humidity_mpc=50000
+[00:00:01.697,000] <inf> app: EVT,APP,READY
+[00:00:03.586,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25100,humidity_mpc=50080
+[00:00:05.595,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25200,humidity_mpc=50160
+[00:00:07.605,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25300,humidity_mpc=50240
+[00:00:09.614,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25400,humidity_mpc=50320
+[00:00:11.623,000] <inf> sensor_stub: Test stub: switching to encrypted telemetry
+[00:00:11.632,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,enc=1,iv=CBAD87F13A1B00794A905C41,data=8979523CA92AFE6CDB529BC92B8B417A
+[00:00:13.646,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,enc=1,iv=1C81B6CD10A86CD173133D54,data=DD787F6DDA3CB058615B0F06734B9C9D
+[00:00:15.660,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,enc=1,iv=9272822541B2AE2D7C968796,data=8E352F048B48698D476BB6578DB63F21
+[00:00:17.674,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,enc=1,iv=5FF4871C53703D8AFBFCEF06,data=1FDA36E9652E901A56390E7696A5E477
+[00:00:19.687,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,enc=1,iv=CE7734D4A99A81B35665F94D,data=38B2D768D51180F07202E184C4587135
+[00:00:19.700,000] <wrn> sensor_stub: Test stub reached 10 samples; simulating hang
+[00:00:24.709,000] <wrn> supervisor: EVT,HEALTH,DEGRADED,fail=1,led=stale,led_age_ms=7023,hb=stale,hb_age_ms=7023
+[00:00:26.731,000] <wrn> supervisor: EVT,HEALTH,DEGRADED,fail=3,led=stale,led_age_ms=9045,hb=stale,hb_age_ms=9045
+[00:00:26.742,000] <err> supervisor: EVT,HEALTH,RECOVERY_REQUEST
+[00:00:26.749,000] <err> os: ARCH_EXCEPT with reason 2
+[00:00:26.793,000] <err> os: >>> ZEPHYR FATAL ERROR 2: Stack overflow on CPU 0 (fault during interrupt handling)
+[00:00:26.807,000] <err> os: Current thread: 0x20000100 (supervisor)
+[00:00:26.814,000] <err> os: Halting system
+
+*** Booting Zephyr OS build v4.2.0-6484-g196a1da504bd ***
+[00:00:00.010,000] <inf> app: EVT,APP,START
+[00:00:00.017,000] <inf> fs_nvs: No GC Done marker found: restarting gc
+[00:00:00.123,000] <inf> fs_nvs: 32 Sectors of 128 bytes
+[00:00:00.181,000] <inf> persist_state: Persistent state loaded: consecutive=0 total=0 override=0
+[00:00:00.191,000] <inf> app_crypto: Curve25519 peer public key loaded from provisioning storage
+[00:00:00.897,000] <inf> app_crypto: EVT,PQC,SESSION,counter=1,salt=0x47CB2DF5
+[00:00:01.578,000] <inf> app_crypto: Curve25519 key ready (local_pub=053B912D..., peer fixed)
+[00:00:01.596,000] <inf> app_crypto: AES helper initialized (key_len=32, backend=curve25519)
+[00:00:01.605,000] <wrn> app: Reset cause: WATCHDOG
+[00:00:01.647,000] <wrn> app: EVT,WATCHDOG,RESET_HISTORY,consecutive=1,total=1
+[00:00:01.681,000] <inf> sensor_stub: HTS221 stub active (interval=2000ms)
+[00:00:01.689,000] <inf> sensor_stub: EVT,SENSOR,HTS221_SAMPLE,temp_mc=25000,humidity_mpc=50000

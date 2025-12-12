@@ -129,6 +129,26 @@ Provisioning requires the UART CLI and a larger command stack, which do not fit 
 
 `prj_provision.conf` sets `CONFIG_APP_PROVISION_BUILD=y`, forces the CLI on, and trims other stacks so the enlarged UART thread fits inside 8 KB SRAM. Inspect the file if you need to tune the provisioning workflow for another board.
 
+### Thread-fail demo overlay
+
+Need to show how the watchdog reacts when a production thread wedges? The `tests/thread_fail/` overlay keeps the shipping stack sizes and Curve25519-backed AES path, but after ten HTS221 samples (five plaintext + five “encrypted”) the stub simply stops rescheduling itself. The supervisor/watchdog sequence you see on UART is identical to a real sensor freeze—no helper threads or extra plumbing.
+
+```
+cd ~/zephyrproject
+source .venv/bin/activate
+CCACHE_DISABLE=1 west build -b nucleo_l053r8 ../zephyr-apps/helium_tx/tests/thread_fail -d build/thread_fail
+west flash -r openocd --build-dir build/thread_fail
+python3 -m serial.tools.miniterm /dev/ttyACM0 115200
+```
+
+- Samples #1–5: plaintext HTS221 logs.
+- Log line: `sensor_stub: Test stub: switching to encrypted telemetry`.
+- Samples #6–10: AES-tagged telemetry (Curve key derived on boot).
+- Log line: `sensor_stub: Test stub reached 10 samples; simulating hang`.
+- ~6 seconds later the supervisor emits `EVT,HEALTH,DEGRADED` and requests recovery; the watchdog resets the board and the next boot reports `Reset cause: WATCHDOG`.
+
+Memory footprint for this overlay (Curve + AES, no provisioning): `FLASH 49 036 B / 64 KB (74.82%)`, `RAM 7 400 B / 8 KB (90.33%)`.
+
 ## Testing Strategy
 
 | Suite | Target | Command | Coverage |
