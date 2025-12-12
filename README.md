@@ -15,11 +15,13 @@ The STM32L053R8’s 8 KB SRAM budget is too tight for a true PQC primitive, so
 
 ## Key Features
 
-- **Dual-heartbeat watchdog supervision** – LED + system heartbeats gate every feed so the STM32 IWDG never pets blindly.
-- **Encrypted persistence & telemetry** – Curve25519-backed AES helper derives per-boot AES/MAC keys, encrypting reset counters, watchdog overrides, and HTS221 samples (or your sensor of choice).
-- **Factory provisioning overlay** – `tools/provision_curve.py` and `tools/update_provision_overlay.py` generate/ingest per-device scalars and auto-persist them to NVS in a dedicated build configuration.
-- **Release-grade documentation** – README flowcharts, per-component docs, release logs, and `SECURITY_BACKLOG.md` describe current status plus future hardening.
-- **Automated tests & CI** – `scripts/test_all_configs.sh` runs native_sim suites plus both hardware builds locally and in GitHub Actions.
+| Feature | Description |
+|---------|-------------|
+| Dual-heartbeat watchdog supervision | LED + system heartbeats gate every feed so the STM32 IWDG never pets blindly. |
+| Encrypted persistence & telemetry | Curve25519-backed AES helper derives per-boot AES/MAC keys, encrypting reset counters, watchdog overrides, and HTS221 samples (or your sensor of choice). |
+| Factory provisioning overlay | `tools/provision_curve.py` and `tools/update_provision_overlay.py` generate/ingest per-device scalars and auto-persist them to NVS in a dedicated build configuration. |
+| Release-grade documentation | README flowcharts, per-component docs, release logs, and `SECURITY_BACKLOG.md` describe current status plus future hardening. |
+| Automated tests & CI | `scripts/test_all_configs.sh` runs native_sim suites plus both hardware builds locally and in GitHub Actions. |
 
 ## Quick Start
 
