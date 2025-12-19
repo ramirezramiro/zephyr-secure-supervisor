@@ -40,7 +40,7 @@ Because the cryptographic helpers are isolated, they act as the template for PQC
 
 ## Sensor + Telemetry Loop (`src/sensor_hts221.c`)
 - Runs as delayed work on Zephyr's system queue.
-- Samples the HTS221, keeps 10 plaintext readings before enabling AES output, and logs `EVT,SENSOR,...` lines. When the Curve backend is active it also appends `mac=<crc>` so receivers can authenticate each frame.
+- Samples the HTS221 (X-NUCLEO-IKS01A2 shield, `i2c1` @ `0x5F`), keeps 10 plaintext readings before enabling AES output, and logs `EVT,SENSOR,...` lines. When the Curve backend is active it also appends `mac=<crc>` so receivers can authenticate each frame.
 - Calls `supervisor_notify_led` and `supervisor_notify_system` whenever telemetry is produced so the watchdog has proof of liveness tied to real sensor activity.
 
 `src/log_utils.h` defines `LOG_EVT_SIMPLE` / `LOG_EVT` macros that map to Zephyr logging while preserving compact `EVT,<tag>,<status>` formatting.

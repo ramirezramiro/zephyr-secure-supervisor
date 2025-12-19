@@ -7,6 +7,13 @@
 2. Each run reads temperature and humidity, logs plaintext samples for the first ten cycles, then switches to AES-encrypted payloads (with Curve25519-backed keys when enabled).
 3. After producing telemetry, it toggles the LED heartbeat and calls `supervisor_notify_led` / `supervisor_notify_system` so the watchdog only feeds when actual data flows.
 
+## Hardware binding
+- Shield: X-NUCLEO-IKS01A2 (provides the onboard HTS221).
+- Bus: `i2c1`, address `0x5F` (declared in `boards/nucleo_l053r8_secure_supervisor_app.overlay`).
+- Driver: Zephyr `st,hts221` binding accessed through `DEVICE_DT_GET_ONE(st_hts221)`.
+
+The worker does not poke registers directly; it always goes through Zephyr’s sensor API so swapping in a different I²C sensor is just a matter of replacing the devicetree node and updating the work handler.
+
 ### Telemetry Flowchart
 
 ```mermaid

@@ -23,6 +23,10 @@ The STM32L053R8’s 8 KB SRAM budget is too tight for a true PQC primitive, so
 | Release-grade documentation | README flowcharts, per-component docs, release logs, and `SECURITY_BACKLOG.md` describe current status plus future hardening. |
 | Automated tests & CI | `scripts/test_all_configs.sh` runs native_sim suites plus both hardware builds locally and in GitHub Actions. |
 
+### Sensor hardware binding
+
+The default telemetry payload travels through the HTS221 bundled with the X-NUCLEO-IKS01A2 shield. The board overlay (`boards/nucleo_l053r8_secure_supervisor_app.overlay`) maps that device onto `i2c1` at address `0x5F`, so every `sensor_sample_fetch()` in `src/sensor_hts221.c` rides over I²C. Swapping sensors means updating the overlay to point at your sensor’s bus instance/address (or adding a new node) while leaving the heartbeat/log plumbing in the worker intact.
+
 ## Quick Start
 
 1. `west build -b nucleo_l053r8 -p auto .`
